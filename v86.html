@@ -19,12 +19,16 @@ line-height: 14px; /* Adjust as needed */
 }
 #screen_container > canvas { /* Canvas created by v86 for graphics mode */
 display: none; /* Initially hidden, v86 manages display */
+width: 100%;
+height: 100%;
+object-fit: contain; /* Or 'fill' or 'cover' */
 }
 #controls { text-align: center; margin-bottom: 20px; }
 #file-input { margin-right: 10px; } /* This style might be unused now or need update */
 #status { text-align: center; margin-top: 10px; font-style: italic; }
 #controls label { margin-left: 10px; margin-right: 5px;}
 #controls select { margin-right: 15px; }
+#controls button { margin-top: 5px; margin-bottom: 5px; } /* Added for button spacing */
 </style>
 </head>
 <body>
@@ -32,25 +36,40 @@ display: none; /* Initially hidden, v86 manages display */
 <div id="controls">
   <label for="ram-select">RAM Size:</label>
   <select id="ram-select">
+    <option value="2097152">2MB</option>
+    <option value="4194304">4MB</option>
+    <option value="8388608">8MB</option>
+    <option value="16777216">16MB</option>
+    <option value="33554432" selected>32MB</option>
+    <option value="50331648">48MB</option>
     <option value="67108864">64MB</option>
-    <option value="134217728" selected>128MB</option>
-    <option value="268435456">256MB</option>
-    <option value="536870912">512MB</option>
   </select>
 
   <label for="cpu-speed-select">CPU Speed (MHz):</label>
   <select id="cpu-speed-select">
-    <option value="25">25</option>
+    <option value="33">33</option>
     <option value="50" selected>50</option>
+    <option value="66">66</option>
     <option value="100">100</option>
+    <option value="133">133</option>
     <option value="200">200</option>
+    <option value="233">233</option>
+    <option value="266">266</option>
+    <option value="300">300</option>
   </select>
   <br><br>
 
+  <label for="custom-bios-file-input">Custom BIOS:</label>
+  <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
+  <button id="load-custom-bios-button">Load Custom BIOS</button>
+  <br><br>
+
   <input type="file" id="fda-file-input" accept=".img,.IMG" />
-  <button id="start-fda-button">Start Emulator with Floppy Image</button>
+  <button id="start-fda-button">Start Emulator with Floppy</button>
+  <button id="start-hd-button" style="margin-left: 5px;">Start Emulator with Hard Drive</button>
+  <br> <!-- Break after start buttons -->
   <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
-  <button id="load-hd-button">Load Hard Drive Image</button>
+  <button id="load-hd-button" style="margin-left: 10px;">Load Hard Drive Image</button>
 </div>
 
 <div id="screen_container">
@@ -64,93 +83,169 @@ display: none; /* Initially hidden, v86 manages display */
 
 const startFdaButton = document.getElementById("start-fda-button");
 const fdaFileInput = document.getElementById("fda-file-input");
+const startHdButton = document.getElementById("start-hd-button"); 
 const loadHdButton = document.getElementById("load-hd-button");
 const hdFileInput = document.getElementById("hd-file-input");
 const screenContainer = document.getElementById("screen_container");
 const statusDiv = document.getElementById("status");
 const ramSelect = document.getElementById("ram-select");
 const cpuSpeedSelect = document.getElementById("cpu-speed-select");
+const customBiosFileInput = document.getElementById("custom-bios-file-input");
+const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
 
 let emulator = null; // To hold the emulator instance
 let hdaBuffer = null; // Buffer for the Hard Disk Image
+let customBiosBuffer = null; // Buffer for Custom BIOS
+
+// Common function to initialize emulator
+function initializeAndRunEmulator(config, statusMsg) {
+    if (emulator) {
+        try {
+            emulator.destroy();
+        } catch (err) {
+            console.warn("Error destroying previous emulator instance:", err);
+        }
+        emulator = null;
+        screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
+    }
+    
+    emulator = new V86(config);
+
+    emulator.add_listener("emulator-loaded", () => {
+        statusDiv.textContent = "Emulator loaded. Booting...";
+    });
+    emulator.add_listener("emulator-started", () => {
+        statusDiv.textContent = statusMsg;
+    });
+    emulator.add_listener("emulator-stopped", () => {
+        statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
+    });
+    function handleEmulatorError(event_name, error) {
+        console.error("Emulator event error:", event_name, error);
+        statusDiv.textContent = "Emulator error: " + (error && error.message ? error.message : String(error));
+    }
+    emulator.add_listener("download-error", (err) => handleEmulatorError("download-error", err.request?.statusText || "File download failed"));
+}
 
 startFdaButton.addEventListener("click", () => {
     if (fdaFileInput.files.length === 0) {
-        statusDiv.textContent = "Please select a floppy disk image file (.img) to use with this start button.";
-        alert("Please select a floppy disk image file (.img) to use with this start button.");
+        statusDiv.textContent = "Please select a floppy disk image to use the 'Start with Floppy' button.";
+        alert("Please select a floppy disk image to use the 'Start with Floppy' button.");
         return;
     }
 
-    const disk_image_file = fdaFileInput.files[0]; // This is for FDA
+    const disk_image_file = fdaFileInput.files[0]; 
     statusDiv.textContent = "Reading floppy disk image: " + disk_image_file.name;
 
     const reader = new FileReader();
     reader.onload = function(e) {
-        const fda_image_buffer = e.target.result; // This is an ArrayBuffer for FDA
+        const fda_image_buffer = e.target.result; 
         statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
-
-        if (emulator) {
-            try {
-                emulator.destroy();
-            } catch (err) {
-                console.warn("Error destroying previous emulator instance:", err);
-            }
-            emulator = null;
-            screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
-        }
 
         const selectedRamSize = parseInt(ramSelect.value, 10);
         const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
 
-        // --- v86 Emulator Configuration ---
+        let statusMessage = "Emulator booting from Floppy: " + disk_image_file.name;
+        statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM";
+        statusMessage += ", " + selectedCpuSpeed + "MHz CPU";
+
         let emuConfig = {
             wasm_path: "v86.wasm",
             memory_size: selectedRamSize,
             cpu_mhz: selectedCpuSpeed,
             vga_memory_size: 2 * 1024 * 1024,
             screen_container: screenContainer,
-            bios: { url: "bios/seabios.bin" },
+            bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
             vga_bios: { url: "bios/vgabios.bin" },
-            autostart: true // Start immediately once configured
+            autostart: true,
+            boot_order: 0x213 
         };
+        
+        if (customBiosBuffer) {
+            statusMessage += " (using custom BIOS)";
+        } else {
+            statusMessage += " (using default BIOS)";
+        }
 
-        // Add FDA
         emuConfig.fda = { buffer: fda_image_buffer };
-        let statusMessage = "Emulator running with " + disk_image_file.name;
-        statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM"; // Add RAM to status
-        statusMessage += ", " + selectedCpuSpeed + "MHz CPU"; // Add CPU Speed to status
-
-
-        // Add HDA if hdaBuffer is available
         if (hdaBuffer) {
             emuConfig.hda = { buffer: hdaBuffer };
-            statusMessage += " and a hard drive image.";
+            statusMessage += " (HDA also available).";
         }
         
-        emulator = new V86(emuConfig);
-
-        emulator.add_listener("emulator-loaded", () => {
-            statusDiv.textContent = "Emulator loaded. Booting...";
-        });
-        emulator.add_listener("emulator-started", () => {
-            statusDiv.textContent = statusMessage;
-        });
-        emulator.add_listener("emulator-stopped", () => {
-            statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
-        });
-        function handleEmulatorError(event_name, error) {
-            console.error("Emulator event error:", event_name, error);
-            statusDiv.textContent = "Emulator error: " + (error && error.message ? error.message : String(error));
-        }
-        emulator.add_listener("download-error", (err) => handleEmulatorError("download-error", err.request?.statusText || "File download failed"));
+        initializeAndRunEmulator(emuConfig, statusMessage);
     };
-
     reader.onerror = function(e) {
         statusDiv.textContent = "Error reading floppy file.";
         console.error("FileReader error (FDA):", e);
         alert("Error reading the selected floppy file.");
     };
     reader.readAsArrayBuffer(disk_image_file); 
+});
+
+startHdButton.addEventListener("click", () => {
+    if (!hdaBuffer) {
+        statusDiv.textContent = "Please load a hard drive image first using 'Load Hard Drive Image' button.";
+        alert("Please load a hard drive image first using 'Load Hard Drive Image' button.");
+        return;
+    }
+
+    statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
+
+    const selectedRamSize = parseInt(ramSelect.value, 10);
+    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+    
+    let statusMessage = "Emulator booting from Hard Drive";
+    statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM";
+    statusMessage += ", " + selectedCpuSpeed + "MHz CPU";
+
+    let emuConfig = {
+        wasm_path: "v86.wasm",
+        memory_size: selectedRamSize,
+        cpu_mhz: selectedCpuSpeed,
+        vga_memory_size: 2 * 1024 * 1024,
+        screen_container: screenContainer,
+        bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
+        vga_bios: { url: "bios/vgabios.bin" },
+        autostart: true,
+        boot_order: 0x231 
+    };
+
+    if (customBiosBuffer) {
+        statusMessage += " (using custom BIOS)";
+    } else {
+        statusMessage += " (using default BIOS)";
+    }
+    
+    emuConfig.hda = { buffer: hdaBuffer };
+        
+    initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+loadCustomBiosButton.addEventListener("click", function() {
+    customBiosFileInput.click();
+});
+
+customBiosFileInput.addEventListener('change', function(event) {
+    if (event.target.files.length === 0) {
+        return; 
+    }
+    const file = event.target.files[0];
+    statusDiv.textContent = "Reading custom BIOS: " + file.name + "...";
+
+    const biosReader = new FileReader(); 
+    biosReader.onload = function(e_bios) {
+        customBiosBuffer = e_bios.target.result; 
+        statusDiv.textContent = "Custom BIOS '" + file.name + "' loaded. It will be used on the next emulator start.";
+        customBiosFileInput.value = ""; // Clear the file input
+    };
+    biosReader.onerror = function(e_bios) {
+        statusDiv.textContent = "Error reading custom BIOS: " + file.name;
+        console.error("FileReader error (Custom BIOS):", e_bios);
+        alert("Error reading the selected custom BIOS.");
+        customBiosBuffer = null; 
+    };
+    biosReader.readAsArrayBuffer(file);
 });
 
 loadHdButton.addEventListener("click", function() {
@@ -167,7 +262,7 @@ hdFileInput.addEventListener('change', function(event) {
     const hdaReader = new FileReader(); 
     hdaReader.onload = function(e_hda) {
         hdaBuffer = e_hda.target.result; 
-        statusDiv.textContent = "Hard drive image '" + file.name + "' loaded. It will be used next time emulator starts.";
+        statusDiv.textContent = "Hard drive image '" + file.name + "' loaded. Use 'Start Emulator with Hard Drive' or 'Start Emulator with Floppy'.";
     };
     hdaReader.onerror = function(e_hda) {
         statusDiv.textContent = "Error reading hard drive image: " + file.name;

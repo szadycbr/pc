@@ -67,16 +67,22 @@ object-fit: contain; /* Or 'fill' or 'cover' */
 
   <label for="custom-bios-file-input">Custom BIOS:</label>
   <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
-  <button id="load-custom-bios-button">Load Custom BIOS</button>
+  <button id="load-custom-bios-button">Load BIOS</button>
+  
+  <label for="cdrom-file-input" style="margin-left:15px;">CD-ROM ISO:</label>
+  <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
+  <button id="load-cdrom-button">Load CD ISO</button>
   <br><br>
 
   <input type="file" id="fda-file-input" accept=".img,.IMG" />
-  <button id="start-fda-button">Start Emulator with Floppy</button>
-  <button id="start-hd-button" style="margin-left: 5px;">Start Emulator with Hard Drive</button>
-  <button id="start-empty-button" style="margin-left: 5px;">Start Empty / BIOS Setup</button>
-  <br> <!-- Break after start buttons -->
+  <button id="load-hd-button" style="margin-left: 10px;">Load HD</button> 
   <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
-  <button id="load-hd-button" style="margin-left: 10px;">Load Hard Drive Image</button>
+  <br>
+
+  <button id="start-fda-button">Boot Floppy</button>
+  <button id="start-hd-button" style="margin-left: 5px;">Boot HD</button>
+  <button id="start-cdrom-button" style="margin-left: 5px;">Boot CD</button>
+  <button id="start-empty-button" style="margin-left: 5px;">BIOS / Empty</button>
 </div>
 
 <div id="screen_container">
@@ -88,229 +94,192 @@ object-fit: contain; /* Or 'fill' or 'cover' */
 <script>
 "use strict";
 
+// --- Element References ---
 const startFdaButton = document.getElementById("start-fda-button");
 const fdaFileInput = document.getElementById("fda-file-input");
-const startHdButton = document.getElementById("start-hd-button"); 
-const startEmptyButton = document.getElementById("start-empty-button"); 
-const loadHdButton = document.getElementById("load-hd-button");
+const startHdButton = document.getElementById("start-hd-button");
 const hdFileInput = document.getElementById("hd-file-input");
+const loadHdButton = document.getElementById("load-hd-button");
+const startCdromButton = document.getElementById("start-cdrom-button"); 
+const cdromFileInput = document.getElementById("cdrom-file-input");
+const loadCdromButton = document.getElementById("load-cdrom-button");
+const startEmptyButton = document.getElementById("start-empty-button"); 
+const customBiosFileInput = document.getElementById("custom-bios-file-input");
+const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
 const screenContainer = document.getElementById("screen_container");
 const statusDiv = document.getElementById("status");
 const ramSelect = document.getElementById("ram-select");
 const cpuSpeedSelect = document.getElementById("cpu-speed-select");
-const customBiosFileInput = document.getElementById("custom-bios-file-input");
-const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
 
-let emulator = null; // To hold the emulator instance
-let hdaBuffer = null; // Buffer for the Hard Disk Image
-let customBiosBuffer = null; // Buffer for Custom BIOS
+// --- Global Buffers ---
+let emulator = null; 
+let hdaBuffer = null; 
+let customBiosBuffer = null; 
+let cdromIsoBuffer = null;
 
-// Common function to initialize emulator
+// --- Common Emulator Initialization Function ---
 function initializeAndRunEmulator(config, statusMsg) {
     if (emulator) {
-        try {
-            emulator.destroy();
-        } catch (err) {
-            console.warn("Error destroying previous emulator instance:", err);
-        }
+        try { emulator.destroy(); } catch (err) { console.warn("Error destroying previous emulator:", err); }
         emulator = null;
         screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
     }
     
-    // Attempt to enable SB16
-    config.enable_sb16 = true; 
-
+    config.enable_sb16 = true; // Enable SoundBlaster 16
     emulator = new V86(config);
 
-    emulator.add_listener("emulator-loaded", () => {
-        statusDiv.textContent = "Emulator loaded. Booting...";
+    emulator.add_listener("emulator-loaded", () => { statusDiv.textContent = "Emulator loaded. Booting..."; });
+    emulator.add_listener("emulator-started", () => { statusDiv.textContent = statusMsg; });
+    emulator.add_listener("emulator-stopped", () => { statusDiv.textContent = "Emulator stopped. Select an image and click start to run again."; });
+    emulator.add_listener("download-error", (err) => {
+        console.error("Emulator download error:", err);
+        statusDiv.textContent = "Emulator download error: " + (err.request?.statusText || "File download failed");
     });
-    emulator.add_listener("emulator-started", () => {
-        statusDiv.textContent = statusMsg;
+    const generalEmulatorErrorHandler = (event_name) => (err) => {
+        console.error("Emulator event error:", event_name, err);
+        statusDiv.textContent = `Emulator error (${event_name}): ${err && err.message ? err.message : String(err)}`;
+    };
+    ["error", "nmi", "acpi-event", "acpi-debug"].forEach(event_name => {
+        emulator.add_listener(event_name, generalEmulatorErrorHandler(event_name));
     });
-    emulator.add_listener("emulator-stopped", () => {
-        statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
-    });
-    function handleEmulatorError(event_name, error) {
-        console.error("Emulator event error:", event_name, error);
-        statusDiv.textContent = "Emulator error: " + (error && error.message ? error.message : String(error));
-    }
-    emulator.add_listener("download-error", (err) => handleEmulatorError("download-error", err.request?.statusText || "File download failed"));
 }
 
-startFdaButton.addEventListener("click", () => {
-    if (fdaFileInput.files.length === 0) {
-        statusDiv.textContent = "Please select a floppy disk image to use the 'Start with Floppy' button.";
-        alert("Please select a floppy disk image to use the 'Start with Floppy' button.");
-        return;
-    }
+// --- Base Configuration Function ---
+function getBaseEmulatorConfig() {
+    const selectedRamSize = parseInt(ramSelect.value, 10);
+    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+    let biosConfig = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
+    let biosTypeMessage = customBiosBuffer ? "custom BIOS" : "default BIOS";
 
-    const disk_image_file = fdaFileInput.files[0]; 
-    statusDiv.textContent = "Reading floppy disk image: " + disk_image_file.name;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const fda_image_buffer = e.target.result; 
-        statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
-
-        const selectedRamSize = parseInt(ramSelect.value, 10);
-        const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
-
-        let statusMessage = "Emulator booting from Floppy: " + disk_image_file.name;
-        statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM";
-        statusMessage += ", " + selectedCpuSpeed + "MHz CPU";
-
-        let emuConfig = {
+    return {
+        config: {
             wasm_path: "v86.wasm",
             memory_size: selectedRamSize,
             cpu_mhz: selectedCpuSpeed,
             vga_memory_size: 2 * 1024 * 1024,
             screen_container: screenContainer,
-            bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
+            bios: biosConfig,
             vga_bios: { url: "bios/vgabios.bin" },
-            autostart: true,
-            boot_order: 0x213 
-        };
-        
-        if (customBiosBuffer) {
-            statusMessage += " (using custom BIOS)";
-        } else {
-            statusMessage += " (using default BIOS)";
-        }
+            autostart: true
+        },
+        ramMsg: `${selectedRamSize / (1024*1024)}MB RAM`,
+        cpuMsg: `${selectedCpuSpeed}MHz CPU`,
+        biosMsg: `(using ${biosTypeMessage})`
+    };
+}
 
-        emuConfig.fda = { buffer: fda_image_buffer };
-        if (hdaBuffer) {
-            emuConfig.hda = { buffer: hdaBuffer };
-            statusMessage += " (HDA also available).";
-        }
+// --- Event Listeners for Start Buttons ---
+startFdaButton.addEventListener("click", () => {
+    if (fdaFileInput.files.length === 0) {
+        alert("Please select a floppy disk image to use the 'Boot Floppy' button.");
+        return;
+    }
+    const file = fdaFileInput.files[0];
+    statusDiv.textContent = "Reading floppy disk image: " + file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const fda_buffer = e.target.result;
+        statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
+        
+        const baseConfig = getBaseEmulatorConfig();
+        let emuConfig = { ...baseConfig.config, fda: { buffer: fda_buffer }, boot_order: 0 };
+        
+        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+        if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
+        if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
         
         initializeAndRunEmulator(emuConfig, statusMessage);
     };
-    reader.onerror = function(e) {
-        statusDiv.textContent = "Error reading floppy file.";
-        console.error("FileReader error (FDA):", e);
-        alert("Error reading the selected floppy file.");
-    };
-    reader.readAsArrayBuffer(disk_image_file); 
+    reader.onerror = () => { alert("Error reading floppy file."); statusDiv.textContent = "Error reading floppy file."; };
+    reader.readAsArrayBuffer(file);
 });
 
 startHdButton.addEventListener("click", () => {
     if (!hdaBuffer) {
-        statusDiv.textContent = "Please load a hard drive image first using 'Load Hard Drive Image' button.";
-        alert("Please load a hard drive image first using 'Load Hard Drive Image' button.");
+        alert("Please load a hard drive image first.");
         return;
     }
-
     statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
+    const baseConfig = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfig.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
 
-    const selectedRamSize = parseInt(ramSelect.value, 10);
-    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
-    
-    let statusMessage = "Emulator booting from Hard Drive";
-    statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM";
-    statusMessage += ", " + selectedCpuSpeed + "MHz CPU";
+    let statusMessage = `Emulator booting from Hard Drive, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
 
-    let emuConfig = {
-        wasm_path: "v86.wasm",
-        memory_size: selectedRamSize,
-        cpu_mhz: selectedCpuSpeed,
-        vga_memory_size: 2 * 1024 * 1024,
-        screen_container: screenContainer,
-        bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
-        vga_bios: { url: "bios/vgabios.bin" },
-        autostart: true,
-        boot_order: 0x231 
-    };
+    initializeAndRunEmulator(emuConfig, statusMessage);
+});
 
-    if (customBiosBuffer) {
-        statusMessage += " (using custom BIOS)";
-    } else {
-        statusMessage += " (using default BIOS)";
+startCdromButton.addEventListener("click", () => {
+    if (!cdromIsoBuffer) {
+        alert("Please load a CD-ROM ISO first.");
+        return;
     }
+    statusDiv.textContent = "Preparing emulator to boot from CD-ROM...";
+    const baseConfig = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfig.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
+
+    let statusMessage = `Emulator booting from CD-ROM, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
+    if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
     
-    emuConfig.hda = { buffer: hdaBuffer };
-        
     initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
 startEmptyButton.addEventListener("click", () => {
     statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
-
-    const selectedRamSize = parseInt(ramSelect.value, 10);
-    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
-
-    let statusMessage = "Emulator started (empty/BIOS setup). RAM: " + (selectedRamSize / (1024*1024)) + "MB, CPU: " + selectedCpuSpeed + "MHz";
-
-    let emuConfig = {
-        wasm_path: "v86.wasm",
-        memory_size: selectedRamSize,
-        cpu_mhz: selectedCpuSpeed,
-        vga_memory_size: 2 * 1024 * 1024,
-        screen_container: screenContainer,
-        bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
-        vga_bios: { url: "bios/vgabios.bin" },
-        autostart: true,
-        boot_order: 0 // No specific device, should drop to BIOS or show no bootable media
-    };
-
-    if (customBiosBuffer) {
-        statusMessage += " (using custom BIOS)";
-    } else {
-        statusMessage += " (using default BIOS)";
-    }
+    const baseConfig = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfig.config, boot_order: 0 }; 
+    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
     
     initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
-loadCustomBiosButton.addEventListener("click", function() {
-    customBiosFileInput.click();
-});
-
-customBiosFileInput.addEventListener('change', function(event) {
-    if (event.target.files.length === 0) {
-        return; 
-    }
+// --- Event Listeners for Load Buttons ---
+loadCustomBiosButton.addEventListener("click", () => { customBiosFileInput.click(); });
+customBiosFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
     const file = event.target.files[0];
-    statusDiv.textContent = "Reading custom BIOS: " + file.name + "...";
-
-    const biosReader = new FileReader(); 
-    biosReader.onload = function(e_bios) {
-        customBiosBuffer = e_bios.target.result; 
-        statusDiv.textContent = "Custom BIOS '" + file.name + "' loaded. It will be used on the next emulator start.";
-        customBiosFileInput.value = ""; // Clear the file input
+    statusDiv.textContent = `Reading custom BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom BIOS '${file.name}' loaded. Will be used on next start.`;
+        customBiosFileInput.value = "";
     };
-    biosReader.onerror = function(e_bios) {
-        statusDiv.textContent = "Error reading custom BIOS: " + file.name;
-        console.error("FileReader error (Custom BIOS):", e_bios);
-        alert("Error reading the selected custom BIOS.");
-        customBiosBuffer = null; 
-    };
-    biosReader.readAsArrayBuffer(file);
+    reader.onerror = () => { alert(`Error reading custom BIOS: ${file.name}`); customBiosBuffer = null; statusDiv.textContent = "Error reading custom BIOS."; };
+    reader.readAsArrayBuffer(file);
 });
 
-loadHdButton.addEventListener("click", function() {
-    hdFileInput.click();
-});
-
-hdFileInput.addEventListener('change', function(event) {
-    if (event.target.files.length === 0) {
-        return; 
-    }
+loadCdromButton.addEventListener("click", () => { cdromFileInput.click(); });
+cdromFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
     const file = event.target.files[0];
-    statusDiv.textContent = "Reading hard drive image: " + file.name + "...";
+    statusDiv.textContent = `Reading CD-ROM ISO: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        cdromIsoBuffer = e.target.result;
+        statusDiv.textContent = `CD-ROM ISO '${file.name}' loaded. Ready for CD-ROM boot.`;
+        cdromFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading CD-ROM ISO: ${file.name}`); cdromIsoBuffer = null; statusDiv.textContent = "Error reading CD-ROM ISO.";};
+    reader.readAsArrayBuffer(file);
+});
 
-    const hdaReader = new FileReader(); 
-    hdaReader.onload = function(e_hda) {
-        hdaBuffer = e_hda.target.result; 
-        statusDiv.textContent = "Hard drive image '" + file.name + "' loaded. Use 'Start Emulator with Hard Drive' or 'Start Emulator with Floppy'.";
+loadHdButton.addEventListener("click", () => { hdFileInput.click(); });
+hdFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading hard drive image: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        hdaBuffer = e.target.result;
+        statusDiv.textContent = `Hard drive image '${file.name}' loaded.`;
+        hdFileInput.value = "";
     };
-    hdaReader.onerror = function(e_hda) {
-        statusDiv.textContent = "Error reading hard drive image: " + file.name;
-        console.error("FileReader error (HDA):", e_hda);
-        alert("Error reading the selected hard drive image.");
-        hdaBuffer = null; 
-    };
-    hdaReader.readAsArrayBuffer(file);
+    reader.onerror = () => { alert(`Error reading HDA: ${file.name}`); hdaBuffer = null; statusDiv.textContent = "Error reading HDA.";};
+    reader.readAsArrayBuffer(file);
 });
 </script>
 </body>

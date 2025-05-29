@@ -47,6 +47,12 @@ object-fit: contain; /* Or 'fill' or 'cover' */
 
   <label for="cpu-speed-select">CPU Speed (MHz):</label>
   <select id="cpu-speed-select">
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="4">4</option>
+    <option value="8">8</option>
+    <option value="16">16</option>
+    <option value="25">25</option>
     <option value="33">33</option>
     <option value="50" selected>50</option>
     <option value="66">66</option>
@@ -67,6 +73,7 @@ object-fit: contain; /* Or 'fill' or 'cover' */
   <input type="file" id="fda-file-input" accept=".img,.IMG" />
   <button id="start-fda-button">Start Emulator with Floppy</button>
   <button id="start-hd-button" style="margin-left: 5px;">Start Emulator with Hard Drive</button>
+  <button id="start-empty-button" style="margin-left: 5px;">Start Empty / BIOS Setup</button>
   <br> <!-- Break after start buttons -->
   <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
   <button id="load-hd-button" style="margin-left: 10px;">Load Hard Drive Image</button>
@@ -84,6 +91,7 @@ object-fit: contain; /* Or 'fill' or 'cover' */
 const startFdaButton = document.getElementById("start-fda-button");
 const fdaFileInput = document.getElementById("fda-file-input");
 const startHdButton = document.getElementById("start-hd-button"); 
+const startEmptyButton = document.getElementById("start-empty-button"); 
 const loadHdButton = document.getElementById("load-hd-button");
 const hdFileInput = document.getElementById("hd-file-input");
 const screenContainer = document.getElementById("screen_container");
@@ -109,6 +117,9 @@ function initializeAndRunEmulator(config, statusMsg) {
         screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
     }
     
+    // Attempt to enable SB16
+    config.enable_sb16 = true; 
+
     emulator = new V86(config);
 
     emulator.add_listener("emulator-loaded", () => {
@@ -219,6 +230,35 @@ startHdButton.addEventListener("click", () => {
     
     emuConfig.hda = { buffer: hdaBuffer };
         
+    initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+startEmptyButton.addEventListener("click", () => {
+    statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
+
+    const selectedRamSize = parseInt(ramSelect.value, 10);
+    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+
+    let statusMessage = "Emulator started (empty/BIOS setup). RAM: " + (selectedRamSize / (1024*1024)) + "MB, CPU: " + selectedCpuSpeed + "MHz";
+
+    let emuConfig = {
+        wasm_path: "v86.wasm",
+        memory_size: selectedRamSize,
+        cpu_mhz: selectedCpuSpeed,
+        vga_memory_size: 2 * 1024 * 1024,
+        screen_container: screenContainer,
+        bios: customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" },
+        vga_bios: { url: "bios/vgabios.bin" },
+        autostart: true,
+        boot_order: 0 // No specific device, should drop to BIOS or show no bootable media
+    };
+
+    if (customBiosBuffer) {
+        statusMessage += " (using custom BIOS)";
+    } else {
+        statusMessage += " (using default BIOS)";
+    }
+    
     initializeAndRunEmulator(emuConfig, statusMessage);
 });
 

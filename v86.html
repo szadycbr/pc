@@ -1,250 +1,182 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
 <meta charset="UTF-8">
-
 <title>v86 Emulator - Load Image</title>
-
 <style>
-
 body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
-
 #screen_container {
-
 width: 640px; height: 480px; /* Or your preferred default size */
-
 position: relative; /* For emulator elements like cursor */
-
 border: 1px solid #ccc;
-
 margin: 20px auto;
-
 background-color: #000;
-
 }
-
 #screen_container > div { /* Inner div created by v86 for text mode */
-
 white-space: pre;
-
 font: 14px monospace; /* Adjust as needed */
-
 line-height: 14px; /* Adjust as needed */
-
 }
-
 #screen_container > canvas { /* Canvas created by v86 for graphics mode */
-
 display: none; /* Initially hidden, v86 manages display */
-
 }
-
 #controls { text-align: center; margin-bottom: 20px; }
-
-#file-input { margin-right: 10px; }
-
+#file-input { margin-right: 10px; } /* This style might be unused now or need update */
 #status { text-align: center; margin-top: 10px; font-style: italic; }
-
+#controls label { margin-left: 10px; margin-right: 5px;}
+#controls select { margin-right: 15px; }
 </style>
-
 </head>
-
 <body>
 
-
 <div id="controls">
+  <label for="ram-select">RAM Size:</label>
+  <select id="ram-select">
+    <option value="67108864">64MB</option>
+    <option value="134217728" selected>128MB</option>
+    <option value="268435456">256MB</option>
+    <option value="536870912">512MB</option>
+  </select>
 
-<input type="file" id="file-input" accept=".img,.IMG" />
+  <label for="cpu-speed-select">CPU Speed (MHz):</label>
+  <select id="cpu-speed-select">
+    <option value="25">25</option>
+    <option value="50" selected>50</option>
+    <option value="100">100</option>
+    <option value="200">200</option>
+  </select>
+  <br><br>
 
-<button id="start-button">Start Emulator with Selected Image</button>
-
+  <input type="file" id="fda-file-input" accept=".img,.IMG" />
+  <button id="start-fda-button">Start Emulator with Floppy Image</button>
+  <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
+  <button id="load-hd-button">Load Hard Drive Image</button>
 </div>
-
 
 <div id="screen_container">
-
 <!-- Emulator will render here -->
-
 </div>
-
 <div id="status">Please select an image file and click start.</div>
 
-
 <script src="libv86.js"></script>
-
 <script>
-
 "use strict";
 
-
-const startButton = document.getElementById("start-button");
-
-const fileInput = document.getElementById("file-input");
-
+const startFdaButton = document.getElementById("start-fda-button");
+const fdaFileInput = document.getElementById("fda-file-input");
+const loadHdButton = document.getElementById("load-hd-button");
+const hdFileInput = document.getElementById("hd-file-input");
 const screenContainer = document.getElementById("screen_container");
-
 const statusDiv = document.getElementById("status");
+const ramSelect = document.getElementById("ram-select");
+const cpuSpeedSelect = document.getElementById("cpu-speed-select");
 
 let emulator = null; // To hold the emulator instance
+let hdaBuffer = null; // Buffer for the Hard Disk Image
+
+startFdaButton.addEventListener("click", () => {
+    if (fdaFileInput.files.length === 0) {
+        statusDiv.textContent = "Please select a floppy disk image file (.img) to use with this start button.";
+        alert("Please select a floppy disk image file (.img) to use with this start button.");
+        return;
+    }
+
+    const disk_image_file = fdaFileInput.files[0]; // This is for FDA
+    statusDiv.textContent = "Reading floppy disk image: " + disk_image_file.name;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const fda_image_buffer = e.target.result; // This is an ArrayBuffer for FDA
+        statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
+
+        if (emulator) {
+            try {
+                emulator.destroy();
+            } catch (err) {
+                console.warn("Error destroying previous emulator instance:", err);
+            }
+            emulator = null;
+            screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
+        }
+
+        const selectedRamSize = parseInt(ramSelect.value, 10);
+        const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+
+        // --- v86 Emulator Configuration ---
+        let emuConfig = {
+            wasm_path: "v86.wasm",
+            memory_size: selectedRamSize,
+            cpu_mhz: selectedCpuSpeed,
+            vga_memory_size: 2 * 1024 * 1024,
+            screen_container: screenContainer,
+            bios: { url: "bios/seabios.bin" },
+            vga_bios: { url: "bios/vgabios.bin" },
+            autostart: true // Start immediately once configured
+        };
+
+        // Add FDA
+        emuConfig.fda = { buffer: fda_image_buffer };
+        let statusMessage = "Emulator running with " + disk_image_file.name;
+        statusMessage += ", " + (selectedRamSize / (1024*1024)) + "MB RAM"; // Add RAM to status
+        statusMessage += ", " + selectedCpuSpeed + "MHz CPU"; // Add CPU Speed to status
 
 
-startButton.addEventListener("click", () => {
+        // Add HDA if hdaBuffer is available
+        if (hdaBuffer) {
+            emuConfig.hda = { buffer: hdaBuffer };
+            statusMessage += " and a hard drive image.";
+        }
+        
+        emulator = new V86(emuConfig);
 
-if (fileInput.files.length === 0) {
+        emulator.add_listener("emulator-loaded", () => {
+            statusDiv.textContent = "Emulator loaded. Booting...";
+        });
+        emulator.add_listener("emulator-started", () => {
+            statusDiv.textContent = statusMessage;
+        });
+        emulator.add_listener("emulator-stopped", () => {
+            statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
+        });
+        function handleEmulatorError(event_name, error) {
+            console.error("Emulator event error:", event_name, error);
+            statusDiv.textContent = "Emulator error: " + (error && error.message ? error.message : String(error));
+        }
+        emulator.add_listener("download-error", (err) => handleEmulatorError("download-error", err.request?.statusText || "File download failed"));
+    };
 
-statusDiv.textContent = "Please select a disk image file (.img) first.";
-
-alert("Please select a disk image file (.img) first.");
-
-return;
-
-}
-
-
-const disk_image_file = fileInput.files[0];
-
-statusDiv.textContent = "Reading disk image: " + disk_image_file.name;
-
-
-const reader = new FileReader();
-
-reader.onload = function(e) {
-
-const image_buffer = e.target.result; // This is an ArrayBuffer
-
-statusDiv.textContent = "Disk image loaded. Starting emulator...";
-
-
-// If an old emulator instance exists, destroy it first
-
-if (emulator) {
-
-try {
-
-emulator.destroy();
-
-} catch (err) {
-
-console.warn("Error destroying previous emulator instance:", err);
-
-}
-
-emulator = null;
-
-// Clear the screen container for the new instance
-
-screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
-
-}
-
-// --- v86 Emulator Configuration ---
-
-emulator = new V86({
-
-wasm_path: "v86.wasm", // Assuming v86.wasm is in the same directory
-
-memory_size: 32 * 1024 * 1024, // 32MB, adjust as needed
-
-vga_memory_size: 2 * 1024 * 1024, // 2MB, adjust as needed
-
-screen_container: screenContainer,
-
-// IMPORTANT: These BIOS files must exist at these paths relative to index.html
-
-// You need to get them from the v86 project and add them to your repository.
-
-// For example, create a 'bios' folder in your repo.
-
-bios: {
-
-url: "bios/seabios.bin", 
-
-},
-
-vga_bios: {
-
-url: "bios/vgabios.bin",
-
-},
-
-// Load the selected disk image as the first floppy drive (fda)
-
-fda: {
-
-buffer: image_buffer 
-
-},
-
-// To boot from floppy, ensure fda is checked before hda/cdrom
-
-// The default boot order in v86 usually prioritizes floppy if present.
-
-// boot_order: 0x213, // Example: FD_FIRST then HD_FIRST then CD_FIRST (if needed)
-
-
-autostart: true, // Automatically start when configuration is done
-
+    reader.onerror = function(e) {
+        statusDiv.textContent = "Error reading floppy file.";
+        console.error("FileReader error (FDA):", e);
+        alert("Error reading the selected floppy file.");
+    };
+    reader.readAsArrayBuffer(disk_image_file); 
 });
 
-
-emulator.add_listener("emulator-loaded", () => {
-
-statusDiv.textContent = "Emulator loaded. Booting...";
-
+loadHdButton.addEventListener("click", function() {
+    hdFileInput.click();
 });
 
+hdFileInput.addEventListener('change', function(event) {
+    if (event.target.files.length === 0) {
+        return; 
+    }
+    const file = event.target.files[0];
+    statusDiv.textContent = "Reading hard drive image: " + file.name + "...";
 
-emulator.add_listener("emulator-started", () => {
-
-statusDiv.textContent = "Emulator running with " + disk_image_file.name;
-
+    const hdaReader = new FileReader(); 
+    hdaReader.onload = function(e_hda) {
+        hdaBuffer = e_hda.target.result; 
+        statusDiv.textContent = "Hard drive image '" + file.name + "' loaded. It will be used next time emulator starts.";
+    };
+    hdaReader.onerror = function(e_hda) {
+        statusDiv.textContent = "Error reading hard drive image: " + file.name;
+        console.error("FileReader error (HDA):", e_hda);
+        alert("Error reading the selected hard drive image.");
+        hdaBuffer = null; 
+    };
+    hdaReader.readAsArrayBuffer(file);
 });
-
-emulator.add_listener("emulator-stopped", () => {
-
-statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
-
-});
-
-
-// Log errors to console and status div
-
-function handleEmulatorError(event_name, error) {
-
-console.error("Emulator event error:", event_name, error);
-
-statusDiv.textContent = "Emulator error: " + (error && error.message ? error.message : String(error));
-
-}
-
-emulator.add_listener("download-error", (err) => handleEmulatorError("download-error", err.request?.statusText || "File download failed"));
-
-
-};
-
-
-reader.onerror = function(e) {
-
-statusDiv.textContent = "Error reading file.";
-
-console.error("FileReader error:", e);
-
-alert("Error reading the selected file.");
-
-};
-
-
-reader.readAsArrayBuffer(disk_image_file);
-
-});
-
 </script>
-
 </body>
-
 </html>
-
-

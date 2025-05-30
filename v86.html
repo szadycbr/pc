@@ -4,101 +4,200 @@
 <meta charset="UTF-8">
 <title>v86 Emulator - Load Image</title>
 <style>
-body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
+/* General Reset / Basic Setup */
+html, body {
+    height: 100%; /* Ensure html and body take full height for flex layout */
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Full viewport height */
+}
+
+/* Emulator Screen Area */
 #screen_container {
-width: 640px; height: 480px; /* Or your preferred default size */
-position: relative; /* For emulator elements like cursor */
-border: 1px solid #ccc;
-margin: 20px auto;
-background-color: #000;
+    width: 800px; /* Default desktop width */
+    height: 600px; /* Default desktop height */
+    margin: 10px auto; /* Center on desktop, with some top/bottom margin */
+    position: relative; 
+    background-color: #000;
+    border: 1px solid #ccc;
+    flex-shrink: 0; /* Prevent shrinking if controls overflow */
 }
+
 #screen_container > div { /* Inner div created by v86 for text mode */
-white-space: pre;
-font: 14px monospace; /* Adjust as needed */
-line-height: 14px; /* Adjust as needed */
+    white-space: pre;
+    font: 14px monospace; 
+    line-height: 14px; 
 }
+
 #screen_container > canvas { /* Canvas created by v86 for graphics mode */
-display: none; /* Initially hidden, v86 manages display */
-width: 100%;
-height: 100%;
-object-fit: contain; /* Or 'fill' or 'cover' */
+    display: none; /* Initially hidden, v86 manages display */
+    width: 100%;
+    height: 100%;
+    object-fit: contain; 
 }
-#controls { text-align: center; margin-bottom: 20px; }
-#file-input { margin-right: 10px; } /* This style might be unused now or need update */
-#status { text-align: center; margin-top: 10px; font-style: italic; }
+
+/* Controls Area */
+#controls {
+    padding: 10px;
+    text-align: center; 
+    overflow-y: auto; /* Allow scrolling for controls if they get too tall */
+    flex-grow: 1; /* Allow controls to take remaining space on desktop if screen is fixed */
+}
+
 #controls label { margin-left: 10px; margin-right: 5px;}
-#controls select { margin-right: 15px; }
-#controls input[type="checkbox"] { margin-right: 15px; } /* Style for checkbox */
-#controls button { margin-top: 5px; margin-bottom: 5px; } 
+#controls select { margin-right: 15px; padding: 4px; }
+#controls input[type="checkbox"] { margin-right: 15px; vertical-align: middle; }
+#controls button { margin-top: 5px; margin-bottom: 5px; padding: 6px 10px; } 
+
+/* Status Bar Area */
+#status-container {
+    padding: 8px;
+    text-align: center;
+    font-size: 0.9em;
+    font-style: italic;
+    background-color: #e9e9e9;
+    border-top: 1px solid #ccc;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Mobile Portrait Specific Styles */
+@media (orientation: portrait) and (max-width: 767px) {
+    body {
+        /* Flex direction column is already set */
+    }
+
+    #screen_container {
+        width: 100%;   /* Full width */
+        height: 45vh;  /* Approx 45% of viewport height */
+        margin: 0;     /* No auto margins */
+        border-left: none;
+        border-right: none;
+    }
+
+    #controls {
+        height: calc(100vh - 45vh - 40px); /* Remaining height after screen and status bar (approx 40px for status) */
+        padding: 5px; /* Reduce padding on mobile */
+        display: flex; /* Enable flex for controls children */
+        flex-direction: column; /* Stack control groups */
+        align-items: stretch; /* Make control groups take full width */
+        overflow-y: auto; /* Ensure controls area can scroll */
+    }
+
+    #controls div, #controls label, #controls input[type="file"], #controls button, #controls select {
+        width: 95%; /* Make form elements and buttons take more width */
+        margin: 4px auto; /* Center and provide some vertical spacing */
+        padding: 10px; /* Larger touch targets */
+        box-sizing: border-box; /* Include padding in width/height */
+        font-size: 1em; /* Ensure readable font size */
+    }
+    #controls label { /* Specific for labels in mobile */
+        text-align: left;
+        margin-bottom: 2px;
+        margin-left: 2.5%; /* Align with inputs */
+    }
+     #controls input[type="checkbox"] {
+        width: auto; /* Checkboxes shouldn't be full width */
+        margin-right: 5px; /* Adjust spacing for checkbox */
+        padding: 0;
+    }
+    /* Group related file inputs and their load buttons together if possible */
+    /* For example, make input and its load button display inline-block or flex-row */
+    /* Current structure doesn't group them, so they'll stack. */
+}
+
 </style>
 </head>
 <body>
 
-<div id="controls">
-  <label for="ram-select">RAM Size:</label>
-  <select id="ram-select">
-    <option value="2097152">2MB</option>
-    <option value="4194304">4MB</option>
-    <option value="8388608">8MB</option>
-    <option value="16777216">16MB</option>
-    <option value="33554432" selected>32MB</option>
-    <option value="50331648">48MB</option>
-    <option value="67108864">64MB</option>
-  </select>
-
-  <label for="cpu-speed-select">CPU Speed (MHz):</label>
-  <select id="cpu-speed-select">
-    <option value="1">1</option>
-    <option value="2">2</option>
-    <option value="4">4</option>
-    <option value="8">8</option>
-    <option value="16">16</option>
-    <option value="25">25</option>
-    <option value="33">33</option>
-    <option value="50" selected>50</option>
-    <option value="66">66</option>
-    <option value="100">100</option>
-    <option value="133">133</option>
-    <option value="200">200</option>
-    <option value="233">233</option>
-    <option value="266">266</option>
-    <option value="300">300</option>
-  </select>
-
-  <label for="enable-sound-checkbox" style="margin-left: 15px;">Enable Sound:</label>
-  <input type="checkbox" id="enable-sound-checkbox" checked>
-  <br><br>
-
-  <label for="custom-bios-file-input">Custom BIOS:</label>
-  <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
-  <button id="load-custom-bios-button">Load BIOS</button>
-  
-  <label for="custom-vga-bios-file-input" style="margin-left:15px;">Custom VGA BIOS:</label>
-  <input type="file" id="custom-vga-bios-file-input" accept=".bin" style="display: none;">
-  <button id="load-custom-vga-bios-button">Load VGA BIOS</button>
-  <br><br>
-  
-  <label for="cdrom-file-input">CD-ROM ISO:</label>
-  <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
-  <button id="load-cdrom-button">Load CD ISO</button>
-  <br><br>
-
-  <input type="file" id="fda-file-input" accept=".img,.IMG" />
-  <button id="load-hd-button" style="margin-left: 10px;">Load HD</button> 
-  <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
-  <br>
-
-  <button id="start-fda-button">Boot Floppy</button>
-  <button id="start-hd-button" style="margin-left: 5px;">Boot HD</button>
-  <button id="start-cdrom-button" style="margin-left: 5px;">Boot CD</button>
-  <button id="start-empty-button" style="margin-left: 5px;">BIOS / Empty</button>
-  <button id="reset-emulator-button" style="margin-left: 15px; background-color: #ffe0e0;">Reset Emulator</button>
-</div>
-
 <div id="screen_container">
 <!-- Emulator will render here -->
 </div>
-<div id="status">Please select an image file and click start.</div>
+
+<div id="controls">
+  <div>
+    <label for="ram-select">RAM Size:</label>
+    <select id="ram-select">
+      <option value="2097152">2MB</option>
+      <option value="4194304">4MB</option>
+      <option value="8388608">8MB</option>
+      <option value="16777216">16MB</option>
+      <option value="33554432" selected>32MB</option>
+      <option value="50331648">48MB</option>
+      <option value="67108864">64MB</option>
+    </select>
+  </div>
+  <div>
+    <label for="cpu-speed-select">CPU Speed (MHz):</label>
+    <select id="cpu-speed-select">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="4">4</option>
+      <option value="8">8</option>
+      <option value="16">16</option>
+      <option value="25">25</option>
+      <option value="33">33</option>
+      <option value="50" selected>50</option>
+      <option value="66">66</option>
+      <option value="100">100</option>
+      <option value="133">133</option>
+      <option value="200">200</option>
+      <option value="233">233</option>
+      <option value="266">266</option>
+      <option value="300">300</option>
+    </select>
+  </div>
+  <div>
+    <label for="enable-sound-checkbox">Enable Sound:</label>
+    <input type="checkbox" id="enable-sound-checkbox" checked>
+  </div>
+  <hr>
+  <div>
+    <label for="custom-bios-file-input">Custom BIOS:</label>
+    <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
+    <button id="load-custom-bios-button">Load BIOS</button>
+  </div>
+  <div>
+    <label for="custom-vga-bios-file-input">Custom VGA BIOS:</label>
+    <input type="file" id="custom-vga-bios-file-input" accept=".bin" style="display: none;">
+    <button id="load-custom-vga-bios-button">Load VGA BIOS</button>
+  </div>
+  <div>
+    <label for="cdrom-file-input">CD-ROM ISO:</label>
+    <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
+    <button id="load-cdrom-button">Load CD ISO</button>
+  </div>
+  <hr>
+  <div>
+    <label for="fda-file-input">Floppy Image:</label>
+    <input type="file" id="fda-file-input" accept=".img,.IMG" />
+  </div>
+  <div>
+    <label for="hd-file-input" style="display:block; margin-top:5px;">Hard Drive Image:</label> <!-- Hidden input, so button acts as primary interface -->
+    <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
+    <button id="load-hd-button">Load HD</button> 
+  </div>
+  <hr>
+  <div>
+    <button id="start-fda-button">Boot Floppy</button>
+    <button id="start-hd-button">Boot HD</button>
+    <button id="start-cdrom-button">Boot CD</button>
+  </div>
+  <div>
+    <button id="start-empty-button">BIOS / Empty</button>
+    <button id="reset-emulator-button" style="background-color: #ffe0e0;">Reset Emulator</button>
+  </div>
+</div>
+
+<div id="status-container">
+  <div id="status">Please select an image file and click start.</div>
+</div>
 
 <script src="libv86.js"></script>
 <script>
@@ -118,24 +217,62 @@ const customBiosFileInput = document.getElementById("custom-bios-file-input");
 const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
 const customVgaBiosFileInput = document.getElementById("custom-vga-bios-file-input"); 
 const loadCustomVgaBiosButton = document.getElementById("load-custom-vga-bios-button");
-const resetEmulatorButton = document.getElementById("reset-emulator-button"); // Added
+const resetEmulatorButton = document.getElementById("reset-emulator-button"); 
 const screenContainer = document.getElementById("screen_container");
-const statusDiv = document.getElementById("status");
+const statusDiv = document.getElementById("status"); // This now refers to the div inside status-container
 const ramSelect = document.getElementById("ram-select");
 const cpuSpeedSelect = document.getElementById("cpu-speed-select");
 const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
 
-// --- Global Buffers ---
+// --- Global Buffers & State ---
 let emulator = null; 
 let hdaBuffer = null; 
 let customBiosBuffer = null; 
 let customVgaBiosBuffer = null; 
 let cdromIsoBuffer = null;
+let screenWakeLockSentinel = null;
+
+// --- Screen Wake Lock Functions ---
+async function requestScreenWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            screenWakeLockSentinel = await navigator.wakeLock.request('screen');
+            console.log("Screen wake lock acquired.");
+            // Append to status, don't overwrite
+            if (statusDiv.textContent.length > 0 && !statusDiv.textContent.includes("wake lock active")) {
+                statusDiv.textContent += " (Screen wake lock active)";
+            }
+            screenWakeLockSentinel.addEventListener('release', () => {
+                console.log("Screen wake lock released.");
+                screenWakeLockSentinel = null; 
+            });
+        } catch (err) {
+            console.error(`Screen wake lock request failed: ${err.name}, ${err.message}`);
+            screenWakeLockSentinel = null;
+        }
+    } else {
+        console.warn("Screen Wake Lock API not supported.");
+    }
+}
+
+async function releaseScreenWakeLock() {
+    if (screenWakeLockSentinel) {
+        try {
+            await screenWakeLockSentinel.release();
+        } catch (err) {
+            console.error(`Screen wake lock release failed: ${err.name}, ${err.message}`);
+            screenWakeLockSentinel = null; 
+        }
+    }
+}
 
 // --- Common Emulator Initialization Function ---
-function initializeAndRunEmulator(config, statusMsg) {
+async function initializeAndRunEmulator(config, statusMsg) { 
     if (emulator) {
-        try { emulator.destroy(); } catch (err) { console.warn("Error destroying previous emulator:", err); }
+        try { 
+            await releaseScreenWakeLock(); 
+            emulator.destroy(); 
+        } catch (err) { console.warn("Error destroying previous emulator:", err); }
         emulator = null;
         screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
     }
@@ -143,19 +280,28 @@ function initializeAndRunEmulator(config, statusMsg) {
     emulator = new V86(config);
 
     emulator.add_listener("emulator-loaded", () => { statusDiv.textContent = "Emulator loaded. Booting..."; });
-    emulator.add_listener("emulator-started", () => { statusDiv.textContent = statusMsg; });
-    emulator.add_listener("emulator-stopped", () => { statusDiv.textContent = "Emulator stopped. Select an image and click start to run again."; });
+    emulator.add_listener("emulator-started", async () => { 
+        statusDiv.textContent = statusMsg;
+        await requestScreenWakeLock(); 
+    });
+    emulator.add_listener("emulator-stopped", async () => { 
+        statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
+        await releaseScreenWakeLock(); 
+    });
     emulator.add_listener("download-error", (err) => {
         console.error("Emulator download error:", err);
         statusDiv.textContent = "Emulator download error: " + (err.request?.statusText || "File download failed");
     });
-    const generalEmulatorErrorHandler = (event_name) => (err) => {
+    const generalEmulatorErrorHandler = (event_name) => async (err) => { 
         console.error("Emulator event error:", event_name, err);
         statusDiv.textContent = `Emulator error (${event_name}): ${err && err.message ? err.message : String(err)}`;
+        await releaseScreenWakeLock(); 
     };
-    ["error", "nmi", "acpi-event", "acpi-debug"].forEach(event_name => {
+    ["error", "nmi"].forEach(event_name => { 
         emulator.add_listener(event_name, generalEmulatorErrorHandler(event_name));
     });
+     emulator.add_listener("acpi-event", () => { /* Placeholder */ });
+     emulator.add_listener("acpi-debug", () => { /* Placeholder */ });
 }
 
 // --- Base Configuration Function ---
@@ -193,7 +339,7 @@ function getBaseEmulatorConfig() {
 }
 
 // --- Event Listeners for Start Buttons ---
-startFdaButton.addEventListener("click", () => {
+startFdaButton.addEventListener("click", async () => { 
     if (fdaFileInput.files.length === 0) {
         alert("Please select a floppy disk image to use the 'Boot Floppy' button.");
         return;
@@ -201,7 +347,7 @@ startFdaButton.addEventListener("click", () => {
     const file = fdaFileInput.files[0];
     statusDiv.textContent = "Reading floppy disk image: " + file.name;
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => { 
         const fda_buffer = e.target.result;
         statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
         
@@ -213,13 +359,13 @@ startFdaButton.addEventListener("click", () => {
         if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
         if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
         
-        initializeAndRunEmulator(emuConfig, statusMessage);
+        await initializeAndRunEmulator(emuConfig, statusMessage);
     };
     reader.onerror = () => { alert("Error reading floppy file."); statusDiv.textContent = "Error reading floppy file."; };
     reader.readAsArrayBuffer(file);
 });
 
-startHdButton.addEventListener("click", () => {
+startHdButton.addEventListener("click", async () => { 
     if (!hdaBuffer) {
         alert("Please load a hard drive image first.");
         return;
@@ -233,10 +379,10 @@ startHdButton.addEventListener("click", () => {
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
 
-    initializeAndRunEmulator(emuConfig, statusMessage);
+    await initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
-startCdromButton.addEventListener("click", () => {
+startCdromButton.addEventListener("click", async () => { 
     if (!cdromIsoBuffer) {
         alert("Please load a CD-ROM ISO first.");
         return;
@@ -250,10 +396,10 @@ startCdromButton.addEventListener("click", () => {
     if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
     
-    initializeAndRunEmulator(emuConfig, statusMessage);
+    await initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
-startEmptyButton.addEventListener("click", () => {
+startEmptyButton.addEventListener("click", async () => { 
     statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
@@ -261,14 +407,16 @@ startEmptyButton.addEventListener("click", () => {
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
     
-    initializeAndRunEmulator(emuConfig, statusMessage);
+    await initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
-resetEmulatorButton.addEventListener("click", function() { // Added
+resetEmulatorButton.addEventListener("click", async function() { 
     if (emulator) {
         try {
+            await releaseScreenWakeLock(); 
             emulator.restart();
             statusDiv.textContent = "Emulator restarting...";
+            await requestScreenWakeLock(); 
         } catch (e) {
             statusDiv.textContent = "Error restarting emulator. Please use a Boot/Start button.";
             console.error("Error restarting emulator:", e);
@@ -278,6 +426,17 @@ resetEmulatorButton.addEventListener("click", function() { // Added
         alert("Emulator is not running. Nothing to reset.");
     }
 });
+
+// --- Page Visibility Handler ---
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && emulator && emulator.is_running && typeof emulator.is_running === 'function' && emulator.is_running()) { 
+        if (!screenWakeLockSentinel) {
+            console.log("Page became visible, attempting to re-acquire screen wake lock.");
+            await requestScreenWakeLock();
+        }
+    }
+});
+
 
 // --- Event Listeners for Load Buttons ---
 loadCustomBiosButton.addEventListener("click", () => { customBiosFileInput.click(); });

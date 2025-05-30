@@ -28,7 +28,8 @@ object-fit: contain; /* Or 'fill' or 'cover' */
 #status { text-align: center; margin-top: 10px; font-style: italic; }
 #controls label { margin-left: 10px; margin-right: 5px;}
 #controls select { margin-right: 15px; }
-#controls button { margin-top: 5px; margin-bottom: 5px; } /* Added for button spacing */
+#controls input[type="checkbox"] { margin-right: 15px; } /* Style for checkbox */
+#controls button { margin-top: 5px; margin-bottom: 5px; } 
 </style>
 </head>
 <body>
@@ -63,13 +64,21 @@ object-fit: contain; /* Or 'fill' or 'cover' */
     <option value="266">266</option>
     <option value="300">300</option>
   </select>
+
+  <label for="enable-sound-checkbox" style="margin-left: 15px;">Enable Sound:</label>
+  <input type="checkbox" id="enable-sound-checkbox" checked>
   <br><br>
 
   <label for="custom-bios-file-input">Custom BIOS:</label>
   <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
   <button id="load-custom-bios-button">Load BIOS</button>
   
-  <label for="cdrom-file-input" style="margin-left:15px;">CD-ROM ISO:</label>
+  <label for="custom-vga-bios-file-input" style="margin-left:15px;">Custom VGA BIOS:</label>
+  <input type="file" id="custom-vga-bios-file-input" accept=".bin" style="display: none;">
+  <button id="load-custom-vga-bios-button">Load VGA BIOS</button>
+  <br><br>
+  
+  <label for="cdrom-file-input">CD-ROM ISO:</label>
   <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
   <button id="load-cdrom-button">Load CD ISO</button>
   <br><br>
@@ -83,6 +92,7 @@ object-fit: contain; /* Or 'fill' or 'cover' */
   <button id="start-hd-button" style="margin-left: 5px;">Boot HD</button>
   <button id="start-cdrom-button" style="margin-left: 5px;">Boot CD</button>
   <button id="start-empty-button" style="margin-left: 5px;">BIOS / Empty</button>
+  <button id="reset-emulator-button" style="margin-left: 15px; background-color: #ffe0e0;">Reset Emulator</button>
 </div>
 
 <div id="screen_container">
@@ -106,15 +116,20 @@ const loadCdromButton = document.getElementById("load-cdrom-button");
 const startEmptyButton = document.getElementById("start-empty-button"); 
 const customBiosFileInput = document.getElementById("custom-bios-file-input");
 const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
+const customVgaBiosFileInput = document.getElementById("custom-vga-bios-file-input"); 
+const loadCustomVgaBiosButton = document.getElementById("load-custom-vga-bios-button");
+const resetEmulatorButton = document.getElementById("reset-emulator-button"); // Added
 const screenContainer = document.getElementById("screen_container");
 const statusDiv = document.getElementById("status");
 const ramSelect = document.getElementById("ram-select");
 const cpuSpeedSelect = document.getElementById("cpu-speed-select");
+const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
 
 // --- Global Buffers ---
 let emulator = null; 
 let hdaBuffer = null; 
 let customBiosBuffer = null; 
+let customVgaBiosBuffer = null; 
 let cdromIsoBuffer = null;
 
 // --- Common Emulator Initialization Function ---
@@ -125,7 +140,6 @@ function initializeAndRunEmulator(config, statusMsg) {
         screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
     }
     
-    config.enable_sb16 = true; // Enable SoundBlaster 16
     emulator = new V86(config);
 
     emulator.add_listener("emulator-loaded", () => { statusDiv.textContent = "Emulator loaded. Booting..."; });
@@ -148,23 +162,33 @@ function initializeAndRunEmulator(config, statusMsg) {
 function getBaseEmulatorConfig() {
     const selectedRamSize = parseInt(ramSelect.value, 10);
     const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
-    let biosConfig = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
-    let biosTypeMessage = customBiosBuffer ? "custom BIOS" : "default BIOS";
+    
+    let biosSettings = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
+    let biosTypeMsg = customBiosBuffer ? "custom BIOS" : "default BIOS";
+
+    let vgaBiosSettings = customVgaBiosBuffer ? { buffer: customVgaBiosBuffer } : { url: "bios/vgabios.bin" };
+    let vgaBiosTypeMsg = customVgaBiosBuffer ? "custom VGA BIOS" : "default VGA BIOS";
+
+    let baseEmuConfig = {
+        wasm_path: "v86.wasm",
+        memory_size: selectedRamSize,
+        cpu_mhz: selectedCpuSpeed,
+        vga_memory_size: 2 * 1024 * 1024,
+        screen_container: screenContainer,
+        bios: biosSettings,
+        vga_bios: vgaBiosSettings,
+        autostart: true
+    };
+
+    if (!enableSoundCheckbox.checked) {
+        baseEmuConfig.disable_audio = true;
+    }
 
     return {
-        config: {
-            wasm_path: "v86.wasm",
-            memory_size: selectedRamSize,
-            cpu_mhz: selectedCpuSpeed,
-            vga_memory_size: 2 * 1024 * 1024,
-            screen_container: screenContainer,
-            bios: biosConfig,
-            vga_bios: { url: "bios/vgabios.bin" },
-            autostart: true
-        },
+        config: baseEmuConfig,
         ramMsg: `${selectedRamSize / (1024*1024)}MB RAM`,
         cpuMsg: `${selectedCpuSpeed}MHz CPU`,
-        biosMsg: `(using ${biosTypeMessage})`
+        biosMsg: `(using ${biosTypeMsg}, ${vgaBiosTypeMsg})` 
     };
 }
 
@@ -181,12 +205,13 @@ startFdaButton.addEventListener("click", () => {
         const fda_buffer = e.target.result;
         statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
         
-        const baseConfig = getBaseEmulatorConfig();
-        let emuConfig = { ...baseConfig.config, fda: { buffer: fda_buffer }, boot_order: 0 };
+        const baseConfigInfo = getBaseEmulatorConfig();
+        let emuConfig = { ...baseConfigInfo.config, fda: { buffer: fda_buffer }, boot_order: 0 };
         
-        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
         if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
         if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+        if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
         
         initializeAndRunEmulator(emuConfig, statusMessage);
     };
@@ -200,12 +225,13 @@ startHdButton.addEventListener("click", () => {
         return;
     }
     statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
-    const baseConfig = getBaseEmulatorConfig();
-    let emuConfig = { ...baseConfig.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
 
-    let statusMessage = `Emulator booting from Hard Drive, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    let statusMessage = `Emulator booting from Hard Drive, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
     if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
 
     initializeAndRunEmulator(emuConfig, statusMessage);
 });
@@ -216,24 +242,41 @@ startCdromButton.addEventListener("click", () => {
         return;
     }
     statusDiv.textContent = "Preparing emulator to boot from CD-ROM...";
-    const baseConfig = getBaseEmulatorConfig();
-    let emuConfig = { ...baseConfig.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
 
-    let statusMessage = `Emulator booting from CD-ROM, ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    let statusMessage = `Emulator booting from CD-ROM, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
     if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
     if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
     
     initializeAndRunEmulator(emuConfig, statusMessage);
 });
 
 startEmptyButton.addEventListener("click", () => {
     statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
-    const baseConfig = getBaseEmulatorConfig();
-    let emuConfig = { ...baseConfig.config, boot_order: 0 }; 
-    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfig.ramMsg}, ${baseConfig.cpuMsg} ${baseConfig.biosMsg}`;
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
+    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
     
     initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+resetEmulatorButton.addEventListener("click", function() { // Added
+    if (emulator) {
+        try {
+            emulator.restart();
+            statusDiv.textContent = "Emulator restarting...";
+        } catch (e) {
+            statusDiv.textContent = "Error restarting emulator. Please use a Boot/Start button.";
+            console.error("Error restarting emulator:", e);
+        }
+    } else {
+        statusDiv.textContent = "Emulator is not running.";
+        alert("Emulator is not running. Nothing to reset.");
+    }
 });
 
 // --- Event Listeners for Load Buttons ---
@@ -249,6 +292,21 @@ customBiosFileInput.addEventListener('change', (event) => {
         customBiosFileInput.value = "";
     };
     reader.onerror = () => { alert(`Error reading custom BIOS: ${file.name}`); customBiosBuffer = null; statusDiv.textContent = "Error reading custom BIOS."; };
+    reader.readAsArrayBuffer(file);
+});
+
+loadCustomVgaBiosButton.addEventListener("click", () => { customVgaBiosFileInput.click(); }); 
+customVgaBiosFileInput.addEventListener('change', (event) => { 
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading custom VGA BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customVgaBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom VGA BIOS '${file.name}' loaded. Will be used on next start.`;
+        customVgaBiosFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading custom VGA BIOS: ${file.name}`); customVgaBiosBuffer = null; statusDiv.textContent = "Error reading custom VGA BIOS."; };
     reader.readAsArrayBuffer(file);
 });
 

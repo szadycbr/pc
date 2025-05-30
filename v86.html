@@ -28,23 +28,22 @@ body {
     background-color: #000;
     border: 1px solid #ccc;
     flex-shrink: 0; 
-    overflow: hidden; /* Added to clip overflowing canvas */
+    overflow: hidden; 
 }
 
-#screen_container > div { /* Inner div created by v86 for text mode */
+#screen_container > div { 
     white-space: pre;
     font: 14px monospace; 
     line-height: 14px; 
 }
 
-#screen_container > canvas { /* Canvas created by v86 for graphics mode */
-    display: none; /* Initially hidden, v86 manages display. When shown by v86, it becomes block or inline-block. */
+#screen_container > canvas { 
+    display: none; 
     width: 100%;
     height: 100%;
-    max-width: 100%; /* Ensure it doesn't exceed container width */
-    max-height: 100%; /* Ensure it doesn't exceed container height */
+    max-width: 100%; 
+    max-height: 100%; 
     object-fit: contain; 
-    /* display: block; */ /* v86 will manage display type. If issues, this could be re-added. */
 }
 
 /* Controls Area */
@@ -62,9 +61,9 @@ body {
 
 /* Status Bar Area */
 #status-container {
-    padding: 0 5px; /* Adjusted padding */
-    line-height: 30px; /* For vertical centering if height is fixed */
-    height: 30px; /* Fixed height */
+    padding: 0 5px; 
+    line-height: 30px; 
+    height: 30px; 
     text-align: center;
     font-size: 0.9em;
     font-style: italic;
@@ -81,12 +80,12 @@ body {
         margin: 0;     
         border-left: none;
         border-right: none;
-        flex-shrink: 0; /* Ensure it doesn't shrink further */
+        flex-shrink: 0; 
     }
 
     #controls {
-        flex-grow: 1; /* Takes available space between screen and status */
-        height: auto; /* Let flex-grow determine height */
+        flex-grow: 1; 
+        height: auto; 
         padding: 5px; 
         display: flex; 
         flex-direction: column; 
@@ -94,7 +93,6 @@ body {
         overflow-y: auto; 
     }
     #status-container {
-        /* Height and flex-shrink are already defined above, should be fine */
     }
 
     #controls div, #controls label, #controls input[type="file"], #controls button, #controls select {
@@ -108,16 +106,16 @@ body {
         text-align: left;
         margin-bottom: 2px;
         margin-left: 2.5%; 
-        padding: 4px 0; /* Adjust padding for labels */
+        padding: 4px 0; 
     }
      #controls input[type="checkbox"] {
         width: auto; 
         margin-right: 5px; 
         padding: 0;
-        vertical-align: middle; /* Align checkbox better with label text */
+        vertical-align: middle; 
     }
-    #controls label[for="enable-sound-checkbox"] { /* Specific adjustment for checkbox label */
-        display: inline-block; /* Allow it to be beside checkbox */
+    #controls label[for="enable-sound-checkbox"] { 
+        display: inline-block; 
         width: auto;
         margin-left: 2.5%;
     }
@@ -202,6 +200,7 @@ body {
   <div>
     <button id="start-empty-button">BIOS / Empty</button>
     <button id="reset-emulator-button" style="background-color: #ffe0e0;">Reset Emulator</button>
+    <button id="toggle-fullscreen-button" style="margin-left: 5px;">Toggle Fullscreen</button>
   </div>
 </div>
 
@@ -228,6 +227,7 @@ const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
 const customVgaBiosFileInput = document.getElementById("custom-vga-bios-file-input"); 
 const loadCustomVgaBiosButton = document.getElementById("load-custom-vga-bios-button");
 const resetEmulatorButton = document.getElementById("reset-emulator-button"); 
+const toggleFullscreenButton = document.getElementById("toggle-fullscreen-button"); // Added
 const screenContainer = document.getElementById("screen_container");
 const statusDiv = document.getElementById("status"); 
 const ramSelect = document.getElementById("ram-select");
@@ -433,6 +433,47 @@ resetEmulatorButton.addEventListener("click", async function() {
     } else {
         statusDiv.textContent = "Emulator is not running.";
         alert("Emulator is not running. Nothing to reset.");
+    }
+});
+
+toggleFullscreenButton.addEventListener("click", function() {
+    if (!document.fullscreenElement) {
+        if (screenContainer.requestFullscreen) {
+            screenContainer.requestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.mozRequestFullScreen) { /* Firefox */
+            screenContainer.mozRequestFullScreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+            screenContainer.webkitRequestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.msRequestFullscreen) { /* IE/Edge */
+            screenContainer.msRequestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            alert("Fullscreen API is not supported by this browser.");
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to exit full-screen mode: ${err.message}`;
+                console.error(`Error attempting to exit full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (document.mozCancelFullScreen) { /* Firefox */
+            document.mozCancelFullScreen().catch(err => { /* ... */ });
+        } else if (document.webkitExitFullscreen) { /* Chrome, Safari & Opera */
+            document.webkitExitFullscreen().catch(err => { /* ... */ });
+        } else if (document.msExitFullscreen) { /* IE/Edge */
+            document.msExitFullscreen().catch(err => { /* ... */ });
+        }
     }
 });
 

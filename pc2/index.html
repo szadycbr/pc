@@ -42,7 +42,11 @@
     </div>
 
     <script src="machines/pcx86/releases/3.00/pcx86v3.js"></script>
-    <script>embedPCx86('deskpro386','machines/pcx86/compaq/deskpro386/vga/2048kb/machine.xml','machines/pcx86/xsl/components.css','{autoMount:{},floppyDrives:[{name:"Drive A (1.44MB)", type:"fdc", size:1440}],drives:[]}');</script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        embedPCx86('deskpro386','machines/pcx86/compaq/deskpro386/vga/2048kb/machine.xml','machines/pcx86/xsl/components.css','{autoMount:{},floppyDrives:[{name:"Drive A (1.44MB)", type:"fdc", size:1440}],drives:[]}');
+      });
+    </script>
 
     <script src="tools/modules/web/explorer.js"></script>
     <script>

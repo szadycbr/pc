@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>v86 Emulator - Load Image</title>
+<style>
+/* General Reset / Basic Setup */
+html, body {
+    height: 100%; 
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; 
+}
+
+/* Emulator Screen Area */
+#screen_container {
+    width: 800px; 
+    height: 600px; 
+    margin: 10px auto; 
+    position: relative; 
+    background-color: #000;
+    border: 1px solid #ccc;
+    flex-shrink: 0; 
+    overflow: hidden; 
+}
+
+#screen_container > div { 
+    white-space: pre;
+    font: 14px monospace; 
+    line-height: 14px; 
+}
+
+#screen_container > canvas { 
+    display: none; 
+    width: 100%;
+    height: 100%;
+    max-width: 100%; 
+    max-height: 100%; 
+    object-fit: contain; 
+}
+
+/* Controls Area */
+#controls {
+    padding: 10px;
+    text-align: center; 
+    overflow-y: auto; 
+    flex-grow: 1; 
+}
+
+#controls label { margin-left: 10px; margin-right: 5px;}
+#controls select { margin-right: 15px; padding: 4px; }
+#controls input[type="checkbox"] { margin-right: 15px; vertical-align: middle; }
+#controls button { margin-top: 5px; margin-bottom: 5px; padding: 6px 10px; } 
+
+/* Status Bar Area */
+#status-container {
+    padding: 0 5px; 
+    line-height: 30px; 
+    height: 30px; 
+    text-align: center;
+    font-size: 0.9em;
+    font-style: italic;
+    background-color: #e9e9e9;
+    border-top: 1px solid #ccc;
+    flex-shrink: 0; 
+}
+
+/* Mobile Portrait Specific Styles */
+@media (orientation: portrait) and (max-width: 767px) {
+    #screen_container {
+        width: 100%;   
+        height: 45vh;  
+        margin: 0;     
+        border-left: none;
+        border-right: none;
+        flex-shrink: 0; 
+    }
+
+    #controls {
+        flex-grow: 1; 
+        height: auto; 
+        padding: 5px; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: stretch; 
+        overflow-y: auto; 
+    }
+    #status-container {
+    }
+
+    #controls div, #controls label, #controls input[type="file"], #controls button, #controls select {
+        width: 95%; 
+        margin: 4px auto; 
+        padding: 10px; 
+        box-sizing: border-box; 
+        font-size: 1em; 
+    }
+    #controls label { 
+        text-align: left;
+        margin-bottom: 2px;
+        margin-left: 2.5%; 
+        padding: 4px 0; 
+    }
+     #controls input[type="checkbox"] {
+        width: auto; 
+        margin-right: 5px; 
+        padding: 0;
+        vertical-align: middle; 
+    }
+    #controls label[for="enable-sound-checkbox"] { 
+        display: inline-block; 
+        width: auto;
+        margin-left: 2.5%;
+    }
+}
+</style>
+</head>
+<body>
+
+<div id="screen_container">
+<!-- Emulator will render here -->
+</div>
+
+<div id="controls">
+  <div>
+    <label for="ram-select">RAM Size:</label>
+    <select id="ram-select">
+      <option value="2097152">2MB</option>
+      <option value="4194304">4MB</option>
+      <option value="8388608">8MB</option>
+      <option value="16777216">16MB</option>
+      <option value="33554432" selected>32MB</option>
+      <option value="50331648">48MB</option>
+      <option value="67108864">64MB</option>
+    </select>
+  </div>
+  <div>
+    <label for="cpu-speed-select">CPU Speed (MHz):</label>
+    <select id="cpu-speed-select">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="4">4</option>
+      <option value="8">8</option>
+      <option value="16">16</option>
+      <option value="25">25</option>
+      <option value="33">33</option>
+      <option value="50" selected>50</option>
+      <option value="66">66</option>
+      <option value="100">100</option>
+      <option value="133">133</option>
+      <option value="200">200</option>
+      <option value="233">233</option>
+      <option value="266">266</option>
+      <option value="300">300</option>
+    </select>
+  </div>
+  <div>
+    <label for="enable-sound-checkbox">Enable Sound:</label>
+    <input type="checkbox" id="enable-sound-checkbox" checked>
+  </div>
+  <hr>
+  <div>
+    <label for="custom-bios-file-input">Custom BIOS:</label>
+    <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
+    <button id="load-custom-bios-button">Load BIOS</button>
+  </div>
+  <div>
+    <label for="custom-vga-bios-file-input">Custom VGA BIOS:</label>
+    <input type="file" id="custom-vga-bios-file-input" accept=".bin" style="display: none;">
+    <button id="load-custom-vga-bios-button">Load VGA BIOS</button>
+  </div>
+  <div>
+    <label for="cdrom-file-input">CD-ROM ISO:</label>
+    <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
+    <button id="load-cdrom-button">Load CD ISO</button>
+  </div>
+  <hr>
+  <div>
+    <label for="fda-file-input">Floppy Image:</label>
+    <input type="file" id="fda-file-input" accept=".img,.IMG" />
+  </div>
+  <div>
+    <label for="hd-file-input" style="display:block; margin-top:5px;">Hard Drive Image:</label> 
+    <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
+    <button id="load-hd-button">Load HD</button> 
+  </div>
+  <hr>
+  <div>
+    <button id="start-fda-button">Boot Floppy</button>
+    <button id="start-hd-button">Boot HD</button>
+    <button id="start-cdrom-button">Boot CD</button>
+  </div>
+  <div>
+    <button id="start-empty-button">BIOS / Empty</button>
+    <button id="reset-emulator-button" style="background-color: #ffe0e0;">Reset Emulator</button>
+    <button id="toggle-fullscreen-button" style="margin-left: 5px;">Toggle Fullscreen</button>
+  </div>
+</div>
+
+<div id="status-container">
+  <div id="status">Please select an image file and click start.</div>
+</div>
+
+<script src="libv86.js"></script>
+<script>
+"use strict";
+
+// --- Element References ---
+const startFdaButton = document.getElementById("start-fda-button");
+const fdaFileInput = document.getElementById("fda-file-input");
+const startHdButton = document.getElementById("start-hd-button");
+const hdFileInput = document.getElementById("hd-file-input");
+const loadHdButton = document.getElementById("load-hd-button");
+const startCdromButton = document.getElementById("start-cdrom-button"); 
+const cdromFileInput = document.getElementById("cdrom-file-input");
+const loadCdromButton = document.getElementById("load-cdrom-button");
+const startEmptyButton = document.getElementById("start-empty-button"); 
+const customBiosFileInput = document.getElementById("custom-bios-file-input");
+const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
+const customVgaBiosFileInput = document.getElementById("custom-vga-bios-file-input"); 
+const loadCustomVgaBiosButton = document.getElementById("load-custom-vga-bios-button");
+const resetEmulatorButton = document.getElementById("reset-emulator-button"); 
+const toggleFullscreenButton = document.getElementById("toggle-fullscreen-button"); // Added
+const screenContainer = document.getElementById("screen_container");
+const statusDiv = document.getElementById("status"); 
+const ramSelect = document.getElementById("ram-select");
+const cpuSpeedSelect = document.getElementById("cpu-speed-select");
+const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
+
+// --- Global Buffers & State ---
+let emulator = null; 
+let hdaBuffer = null; 
+let customBiosBuffer = null; 
+let customVgaBiosBuffer = null; 
+let cdromIsoBuffer = null;
+let screenWakeLockSentinel = null;
+
+// --- Screen Wake Lock Functions ---
+async function requestScreenWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            screenWakeLockSentinel = await navigator.wakeLock.request('screen');
+            console.log("Screen wake lock acquired.");
+            if (statusDiv.textContent.length > 0 && !statusDiv.textContent.includes("wake lock active")) {
+                statusDiv.textContent += " (Screen wake lock active)";
+            }
+            screenWakeLockSentinel.addEventListener('release', () => {
+                console.log("Screen wake lock released.");
+                screenWakeLockSentinel = null; 
+            });
+        } catch (err) {
+            console.error(`Screen wake lock request failed: ${err.name}, ${err.message}`);
+            screenWakeLockSentinel = null;
+        }
+    } else {
+        console.warn("Screen Wake Lock API not supported.");
+    }
+}
+
+async function releaseScreenWakeLock() {
+    if (screenWakeLockSentinel) {
+        try {
+            await screenWakeLockSentinel.release();
+        } catch (err) {
+            console.error(`Screen wake lock release failed: ${err.name}, ${err.message}`);
+            screenWakeLockSentinel = null; 
+        }
+    }
+}
+
+// --- Common Emulator Initialization Function ---
+async function initializeAndRunEmulator(config, statusMsg) { 
+    if (emulator) {
+        try { 
+            await releaseScreenWakeLock(); 
+            emulator.destroy(); 
+        } catch (err) { console.warn("Error destroying previous emulator:", err); }
+        emulator = null;
+        screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
+    }
+    
+    emulator = new V86(config);
+
+    emulator.add_listener("emulator-loaded", () => { statusDiv.textContent = "Emulator loaded. Booting..."; });
+    emulator.add_listener("emulator-started", async () => { 
+        statusDiv.textContent = statusMsg;
+        await requestScreenWakeLock(); 
+    });
+    emulator.add_listener("emulator-stopped", async () => { 
+        statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
+        await releaseScreenWakeLock(); 
+    });
+    emulator.add_listener("download-error", (err) => {
+        console.error("Emulator download error:", err);
+        statusDiv.textContent = "Emulator download error: " + (err.request?.statusText || "File download failed");
+    });
+    const generalEmulatorErrorHandler = (event_name) => async (err) => { 
+        console.error("Emulator event error:", event_name, err);
+        statusDiv.textContent = `Emulator error (${event_name}): ${err && err.message ? err.message : String(err)}`;
+        await releaseScreenWakeLock(); 
+    };
+    ["error", "nmi"].forEach(event_name => { 
+        emulator.add_listener(event_name, generalEmulatorErrorHandler(event_name));
+    });
+     emulator.add_listener("acpi-event", () => { /* Placeholder */ });
+     emulator.add_listener("acpi-debug", () => { /* Placeholder */ });
+}
+
+// --- Base Configuration Function ---
+function getBaseEmulatorConfig() {
+    const selectedRamSize = parseInt(ramSelect.value, 10);
+    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+    
+    let biosSettings = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
+    let biosTypeMsg = customBiosBuffer ? "custom BIOS" : "default BIOS";
+
+    let vgaBiosSettings = customVgaBiosBuffer ? { buffer: customVgaBiosBuffer } : { url: "bios/vgabios.bin" };
+    let vgaBiosTypeMsg = customVgaBiosBuffer ? "custom VGA BIOS" : "default VGA BIOS";
+
+    let baseEmuConfig = {
+        wasm_path: "v86.wasm",
+        memory_size: selectedRamSize,
+        cpu_mhz: selectedCpuSpeed,
+        vga_memory_size: 2 * 1024 * 1024,
+        screen_container: screenContainer,
+        bios: biosSettings,
+        vga_bios: vgaBiosSettings,
+        autostart: true
+    };
+
+    if (!enableSoundCheckbox.checked) {
+        baseEmuConfig.disable_audio = true;
+    }
+
+    return {
+        config: baseEmuConfig,
+        ramMsg: `${selectedRamSize / (1024*1024)}MB RAM`,
+        cpuMsg: `${selectedCpuSpeed}MHz CPU`,
+        biosMsg: `(using ${biosTypeMsg}, ${vgaBiosTypeMsg})` 
+    };
+}
+
+// --- Event Listeners for Start Buttons ---
+startFdaButton.addEventListener("click", async () => { 
+    if (fdaFileInput.files.length === 0) {
+        alert("Please select a floppy disk image to use the 'Boot Floppy' button.");
+        return;
+    }
+    const file = fdaFileInput.files[0];
+    statusDiv.textContent = "Reading floppy disk image: " + file.name;
+    const reader = new FileReader();
+    reader.onload = async (e) => { 
+        const fda_buffer = e.target.result;
+        statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
+        
+        const baseConfigInfo = getBaseEmulatorConfig();
+        let emuConfig = { ...baseConfigInfo.config, fda: { buffer: fda_buffer }, boot_order: 0 };
+        
+        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+        if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
+        if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+        if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
+        
+        await initializeAndRunEmulator(emuConfig, statusMessage);
+    };
+    reader.onerror = () => { alert("Error reading floppy file."); statusDiv.textContent = "Error reading floppy file."; };
+    reader.readAsArrayBuffer(file);
+});
+
+startHdButton.addEventListener("click", async () => { 
+    if (!hdaBuffer) {
+        alert("Please load a hard drive image first.");
+        return;
+    }
+    statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
+
+    let statusMessage = `Emulator booting from Hard Drive, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
+
+    await initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+startCdromButton.addEventListener("click", async () => { 
+    if (!cdromIsoBuffer) {
+        alert("Please load a CD-ROM ISO first.");
+        return;
+    }
+    statusDiv.textContent = "Preparing emulator to boot from CD-ROM...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
+
+    let statusMessage = `Emulator booting from CD-ROM, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
+    if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
+    
+    await initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+startEmptyButton.addEventListener("click", async () => { 
+    statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
+    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
+    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
+    
+    await initializeAndRunEmulator(emuConfig, statusMessage);
+});
+
+resetEmulatorButton.addEventListener("click", async function() { 
+    if (emulator) {
+        try {
+            await releaseScreenWakeLock(); 
+            emulator.restart();
+            statusDiv.textContent = "Emulator restarting...";
+            await requestScreenWakeLock(); 
+        } catch (e) {
+            statusDiv.textContent = "Error restarting emulator. Please use a Boot/Start button.";
+            console.error("Error restarting emulator:", e);
+        }
+    } else {
+        statusDiv.textContent = "Emulator is not running.";
+        alert("Emulator is not running. Nothing to reset.");
+    }
+});
+
+toggleFullscreenButton.addEventListener("click", function() {
+    if (!document.fullscreenElement) {
+        if (screenContainer.requestFullscreen) {
+            screenContainer.requestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.mozRequestFullScreen) { /* Firefox */
+            screenContainer.mozRequestFullScreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+            screenContainer.webkitRequestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (screenContainer.msRequestFullscreen) { /* IE/Edge */
+            screenContainer.msRequestFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to enable full-screen mode: ${err.message}`;
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            alert("Fullscreen API is not supported by this browser.");
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(err => {
+                statusDiv.textContent = `Error attempting to exit full-screen mode: ${err.message}`;
+                console.error(`Error attempting to exit full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else if (document.mozCancelFullScreen) { /* Firefox */
+            document.mozCancelFullScreen().catch(err => { /* ... */ });
+        } else if (document.webkitExitFullscreen) { /* Chrome, Safari & Opera */
+            document.webkitExitFullscreen().catch(err => { /* ... */ });
+        } else if (document.msExitFullscreen) { /* IE/Edge */
+            document.msExitFullscreen().catch(err => { /* ... */ });
+        }
+    }
+});
+
+// --- Page Visibility Handler ---
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && emulator && emulator.is_running && typeof emulator.is_running === 'function' && emulator.is_running()) { 
+        if (!screenWakeLockSentinel) {
+            console.log("Page became visible, attempting to re-acquire screen wake lock.");
+            await requestScreenWakeLock();
+        }
+    }
+});
+
+
+// --- Event Listeners for Load Buttons ---
+loadCustomBiosButton.addEventListener("click", () => { customBiosFileInput.click(); });
+customBiosFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading custom BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom BIOS '${file.name}' loaded. Will be used on next start.`;
+        customBiosFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading custom BIOS: ${file.name}`); customBiosBuffer = null; statusDiv.textContent = "Error reading custom BIOS."; };
+    reader.readAsArrayBuffer(file);
+});
+
+loadCustomVgaBiosButton.addEventListener("click", () => { customVgaBiosFileInput.click(); }); 
+customVgaBiosFileInput.addEventListener('change', (event) => { 
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading custom VGA BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customVgaBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom VGA BIOS '${file.name}' loaded. Will be used on next start.`;
+        customVgaBiosFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading custom VGA BIOS: ${file.name}`); customVgaBiosBuffer = null; statusDiv.textContent = "Error reading custom VGA BIOS."; };
+    reader.readAsArrayBuffer(file);
+});
+
+loadCdromButton.addEventListener("click", () => { cdromFileInput.click(); });
+cdromFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading CD-ROM ISO: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        cdromIsoBuffer = e.target.result;
+        statusDiv.textContent = `CD-ROM ISO '${file.name}' loaded. Ready for CD-ROM boot.`;
+        cdromFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading CD-ROM ISO: ${file.name}`); cdromIsoBuffer = null; statusDiv.textContent = "Error reading CD-ROM ISO.";};
+    reader.readAsArrayBuffer(file);
+});
+
+loadHdButton.addEventListener("click", () => { hdFileInput.click(); });
+hdFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading hard drive image: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        hdaBuffer = e.target.result;
+        statusDiv.textContent = `Hard drive image '${file.name}' loaded.`;
+        hdFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading HDA: ${file.name}`); hdaBuffer = null; statusDiv.textContent = "Error reading HDA.";};
+    reader.readAsArrayBuffer(file);
+});
+</script>
+</body>
+</html>

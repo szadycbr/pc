@@ -209,7 +209,7 @@ body {
   <div>
     <label for="cdrom-file-input">CD-ROM ISO:</label>
     <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
-    <button id="load-cdrom-button">Load CD ISO</button>
+    <button id="load-cdrom-button">Load CD ISO</button><span id="cdrom-file-name"></span>
   </div>
   <hr>
   <div>
@@ -219,7 +219,7 @@ body {
   <div>
     <label for="hd-file-input" style="display:block; margin-top:5px;">Hard Drive Image:</label> 
     <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
-    <button id="load-hd-button">Load HD</button> 
+    <button id="load-hd-button">Load HD</button><span id="hd-file-name"></span>
   </div>
   <hr>
   <div>
@@ -576,9 +576,10 @@ cdromFileInput.addEventListener('change', (event) => {
     reader.onload = (e) => {
         cdromIsoBuffer = e.target.result;
         statusDiv.textContent = `CD-ROM ISO '${file.name}' loaded. Ready for CD-ROM boot.`;
+        document.getElementById('cdrom-file-name').textContent = ' (' + file.name + ')';
         cdromFileInput.value = "";
     };
-    reader.onerror = () => { alert(`Error reading CD-ROM ISO: ${file.name}`); cdromIsoBuffer = null; statusDiv.textContent = "Error reading CD-ROM ISO.";};
+    reader.onerror = () => { alert(`Error reading CD-ROM ISO: ${file.name}`); cdromIsoBuffer = null; statusDiv.textContent = "Error reading CD-ROM ISO."; document.getElementById('cdrom-file-name').textContent = '';};
     reader.readAsArrayBuffer(file);
 });
 
@@ -591,9 +592,10 @@ hdFileInput.addEventListener('change', (event) => {
     reader.onload = (e) => {
         hdaBuffer = e.target.result;
         statusDiv.textContent = `Hard drive image '${file.name}' loaded.`;
+        document.getElementById('hd-file-name').textContent = ' (' + file.name + ')';
         hdFileInput.value = "";
     };
-    reader.onerror = () => { alert(`Error reading HDA: ${file.name}`); hdaBuffer = null; statusDiv.textContent = "Error reading HDA.";};
+    reader.onerror = () => { alert(`Error reading HDA: ${file.name}`); hdaBuffer = null; statusDiv.textContent = "Error reading HDA."; document.getElementById('hd-file-name').textContent = '';};
     reader.readAsArrayBuffer(file);
 });
 </script>

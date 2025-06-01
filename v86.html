@@ -195,6 +195,10 @@ body {
     <label for="enable-sound-checkbox">Enable Sound:</label>
     <input type="checkbox" id="enable-sound-checkbox" checked>
   </div>
+  <div>
+    <label for="brightness-slider">Brightness:</label>
+    <input type="range" id="brightness-slider" min="0.5" max="1.5" step="0.1" value="1">
+  </div>
   <hr>
   <div>
     <label for="custom-bios-file-input">Custom BIOS:</label>
@@ -267,6 +271,24 @@ const vgaMemorySelect = document.getElementById("vga-memory-select");
 const netAdapterSelect = document.getElementById("net-adapter-select");
 const cpuJitSelect = document.getElementById("cpu-jit-select");
 const acpiCheckbox = document.getElementById("acpi-checkbox");
+const brightnessSlider = document.getElementById("brightness-slider");
+
+// --- Event Listener for Brightness Slider ---
+brightnessSlider.addEventListener("input", (event) => {
+    const brightnessValue = event.target.value;
+    const canvasElement = screenContainer.getElementsByTagName("canvas")[0];
+    const textModeDiv = screenContainer.getElementsByTagName("div")[0]; // This is the first div inside screen_container
+
+    if (canvasElement) {
+        // Apply to canvas whether it's displayed or not, v86 toggles its display
+        canvasElement.style.filter = `brightness(${brightnessValue})`;
+    }
+
+    // Apply to textModeDiv, v86 also toggles its display (or rather the canvas's display)
+    if (textModeDiv) {
+         textModeDiv.style.filter = `brightness(${brightnessValue})`;
+    }
+});
 
 // --- Global Buffers & State ---
 let emulator = null; 

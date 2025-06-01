@@ -162,6 +162,36 @@ body {
     </select>
   </div>
   <div>
+    <label for="vga-memory-select">VGA Memory Size:</label>
+    <select id="vga-memory-select">
+      <option value="2097152" selected>2MB</option>
+      <option value="4194304">4MB</option>
+      <option value="8388608">8MB</option>
+      <option value="16777216">16MB</option>
+    </select>
+  </div>
+  <div>
+    <label for="net-adapter-select">Network Adapter:</label>
+    <select id="net-adapter-select">
+      <option value="rtl8139" selected>Realtek RTL8139</option>
+      <option value="ne2k_pci">NE2000 PCI</option>
+      <option value="pcnet">AMD PCnet-PCI II</option>
+      <option value="virtio-net">VirtIO Net</option>
+    </select>
+  </div>
+  <div>
+    <label for="cpu-jit-select">CPU JIT:</label>
+    <select id="cpu-jit-select">
+      <option value="auto" selected>Auto</option>
+      <option value="on">Force On</option>
+      <option value="off">Force Off</option>
+    </select>
+  </div>
+  <div>
+    <label for="acpi-checkbox">Enable ACPI:</label>
+    <input type="checkbox" id="acpi-checkbox" checked>
+  </div>
+  <div>
     <label for="enable-sound-checkbox">Enable Sound:</label>
     <input type="checkbox" id="enable-sound-checkbox" checked>
   </div>
@@ -233,6 +263,10 @@ const statusDiv = document.getElementById("status");
 const ramSelect = document.getElementById("ram-select");
 const cpuSpeedSelect = document.getElementById("cpu-speed-select");
 const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
+const vgaMemorySelect = document.getElementById("vga-memory-select");
+const netAdapterSelect = document.getElementById("net-adapter-select");
+const cpuJitSelect = document.getElementById("cpu-jit-select");
+const acpiCheckbox = document.getElementById("acpi-checkbox");
 
 // --- Global Buffers & State ---
 let emulator = null; 
@@ -317,6 +351,10 @@ async function initializeAndRunEmulator(config, statusMsg) {
 function getBaseEmulatorConfig() {
     const selectedRamSize = parseInt(ramSelect.value, 10);
     const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
+    const selectedVgaMemorySize = parseInt(vgaMemorySelect.value, 10);
+    const selectedNetAdapter = netAdapterSelect.value;
+    const selectedCpuJit = cpuJitSelect.value;
+    const acpiEnabled = acpiCheckbox.checked;
     
     let biosSettings = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
     let biosTypeMsg = customBiosBuffer ? "custom BIOS" : "default BIOS";
@@ -328,12 +366,18 @@ function getBaseEmulatorConfig() {
         wasm_path: "v86.wasm",
         memory_size: selectedRamSize,
         cpu_mhz: selectedCpuSpeed,
-        vga_memory_size: 2 * 1024 * 1024,
+        vga_memory_size: selectedVgaMemorySize,
         screen_container: screenContainer,
         bios: biosSettings,
         vga_bios: vgaBiosSettings,
-        autostart: true
+        autostart: true,
+        net_device: { type: selectedNetAdapter },
+        acpi: acpiEnabled,
     };
+
+    if (selectedCpuJit !== "auto") {
+        baseEmuConfig.disable_jit = (selectedCpuJit === "off");
+    }
 
     if (!enableSoundCheckbox.checked) {
         baseEmuConfig.disable_audio = true;
@@ -343,7 +387,11 @@ function getBaseEmulatorConfig() {
         config: baseEmuConfig,
         ramMsg: `${selectedRamSize / (1024*1024)}MB RAM`,
         cpuMsg: `${selectedCpuSpeed}MHz CPU`,
-        biosMsg: `(using ${biosTypeMsg}, ${vgaBiosTypeMsg})` 
+        vgaMemMsg: `${selectedVgaMemorySize / (1024*1024)}MB VGA`,
+        netMsg: `Net: ${selectedNetAdapter}`,
+        acpiMsg: `ACPI: ${acpiEnabled ? "On" : "Off"}`,
+        jitMsg: `JIT: ${selectedCpuJit}`,
+        biosMsg: `(using ${biosTypeMsg}, ${vgaBiosTypeMsg})`
     };
 }
 
@@ -363,7 +411,7 @@ startFdaButton.addEventListener("click", async () => {
         const baseConfigInfo = getBaseEmulatorConfig();
         let emuConfig = { ...baseConfigInfo.config, fda: { buffer: fda_buffer }, boot_order: 0 };
         
-        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg} ${baseConfigInfo.biosMsg}`;
         if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
         if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
         if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
@@ -383,7 +431,7 @@ startHdButton.addEventListener("click", async () => {
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
 
-    let statusMessage = `Emulator booting from Hard Drive, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    let statusMessage = `Emulator booting from Hard Drive, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg} ${baseConfigInfo.biosMsg}`;
     if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
@@ -400,7 +448,7 @@ startCdromButton.addEventListener("click", async () => {
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
 
-    let statusMessage = `Emulator booting from CD-ROM, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    let statusMessage = `Emulator booting from CD-ROM, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg} ${baseConfigInfo.biosMsg}`;
     if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
     if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
@@ -412,7 +460,7 @@ startEmptyButton.addEventListener("click", async () => {
     statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
-    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg} ${baseConfigInfo.biosMsg}`;
+    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg} ${baseConfigInfo.biosMsg}`;
     if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
     if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
     

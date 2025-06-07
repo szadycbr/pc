@@ -132,74 +132,47 @@ html, body {
     <div id="emu-area">
         <div id="controls-panel">
             <div>
-                <label for="ram-select">RAM Size:</label>
-                <select id="ram-select">
-                    <option value="2097152">2MB</option>
-                    <option value="4194304">4MB</option>
-                    <option value="8388608">8MB</option>
-                    <option value="16777216">16MB</option>
-                    <option value="33554432" selected>32MB</option>
-                    <option value="50331648">48MB</option>
-                    <option value="67108864">64MB</option>
-                </select>
-            </div>
-            <div>
-                <label for="cpu-speed-select">CPU Speed (MHz):</label>
-                <select id="cpu-speed-select">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="4">4</option>
-                    <option value="8">8</option>
-                    <option value="16">16</option>
-                    <option value="25">25</option>
-                    <option value="33">33</option>
-                    <option value="50" selected>50</option>
-                    <option value="66">66</option>
-                    <option value="100">100</option>
-                    <option value="133">133</option>
-                    <option value="200">200</option>
-                    <option value="233">233</option>
-                    <option value="266">266</option>
-                    <option value="300">300</option>
-                </select>
-            </div>
-            <div>
-                <label for="vga-memory-select">VGA Memory Size:</label>
-                <select id="vga-memory-select">
-                    <option value="2097152" selected>2MB</option>
-                    <option value="4194304">4MB</option>
-                    <option value="8388608">8MB</option>
-                    <option value="16777216">16MB</option>
-                </select>
-            </div>
-            <div>
-                <label for="net-adapter-select">Network Adapter:</label>
-                <select id="net-adapter-select">
-                    <option value="rtl8139" selected>Realtek RTL8139</option>
-                    <option value="ne2k_pci">NE2000 PCI</option>
-                    <option value="pcnet">AMD PCnet-PCI II</option>
-                    <option value="virtio-net">VirtIO Net</option>
-                </select>
-            </div>
-            <div>
-                <label for="cpu-jit-select">CPU JIT:</label>
-                <select id="cpu-jit-select">
-                    <option value="auto" selected>Auto</option>
-                    <option value="on">Force On</option>
-                    <option value="off">Force Off</option>
-                </select>
-            </div>
-            <div>
-                <label for="acpi-checkbox">Enable ACPI:</label>
-                <input type="checkbox" id="acpi-checkbox" checked>
+                <label for="enable-sound-checkbox">Enable Sound:</label>
+                <input type="checkbox" id="enable-sound-checkbox" checked>
             </div>
             <div>
                 <label for="brightness-slider">Brightness:</label>
                 <input type="range" id="brightness-slider" min="0.5" max="1.5" step="0.1" value="1">
             </div>
+            <hr>
+            <!-- SB16 options -->
             <div>
-                <label for="enable-sound-checkbox">Enable Sound:</label>
-                <input type="checkbox" id="enable-sound-checkbox" checked>
+                <label for="sb16-irq-select">SB16 IRQ:</label>
+                <select id="sb16-irq-select">
+                    <option value="5" selected>5</option>
+                    <option value="7">7</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+            </div>
+            <div>
+                <label for="sb16-dma8-select">SB16 DMA 8-bit:</label>
+                <select id="sb16-dma8-select">
+                    <option value="0">0</option>
+                    <option value="1" selected>1</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <div>
+                <label for="sb16-dma16-select">SB16 DMA 16-bit:</label>
+                <select id="sb16-dma16-select">
+                    <option value="5" selected>5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
+            </div>
+            <div>
+                <label for="sb16-port-select">SB16 Port:</label>
+                <select id="sb16-port-select">
+                    <option value="0x220" selected>0x220</option>
+                    <option value="0x240">0x240</option>
+                    <option value="0x260">0x260</option>
+                </select>
             </div>
             <hr>
             <div>
@@ -256,16 +229,12 @@ html, body {
 <script src="libv86.js"></script>
 <script>
 "use strict";
-
-// Remove aspect ratio logic, fill available space fully
 function resizeScreen() {
     const wrapper = document.getElementById('screen_aspect_wrapper');
     const container = document.getElementById('screen_container');
     if (!wrapper || !container) return;
-    // Fill wrapper entirely
     container.style.width = "100%";
     container.style.height = "100%";
-    // Stretch canvas/textmode fully
     let canvas = container.querySelector("canvas");
     let textDiv = container.querySelector("div");
     if (canvas) {
@@ -282,8 +251,6 @@ window.addEventListener('resize', resizeScreen);
 window.addEventListener('DOMContentLoaded', resizeScreen);
 setTimeout(resizeScreen, 200);
 
-// (All the rest of your original JS logic is unchanged and included below)
-// --- Element References ---
 const startFdaButton = document.getElementById("start-fda-button");
 const fdaFileInput = document.getElementById("fda-file-input");
 const startHdButton = document.getElementById("start-hd-button");
@@ -301,15 +268,15 @@ const resetEmulatorButton = document.getElementById("reset-emulator-button");
 const toggleFullscreenButton = document.getElementById("toggle-fullscreen-button");
 const screenContainer = document.getElementById("screen_container");
 const statusDiv = document.getElementById("status"); 
-const ramSelect = document.getElementById("ram-select");
-const cpuSpeedSelect = document.getElementById("cpu-speed-select");
 const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
-const vgaMemorySelect = document.getElementById("vga-memory-select");
-const netAdapterSelect = document.getElementById("net-adapter-select");
-const cpuJitSelect = document.getElementById("cpu-jit-select");
-const acpiCheckbox = document.getElementById("acpi-checkbox");
 const brightnessSlider = document.getElementById("brightness-slider");
+// SB16 controls
+const sb16IrqSelect = document.getElementById("sb16-irq-select");
+const sb16Dma8Select = document.getElementById("sb16-dma8-select");
+const sb16Dma16Select = document.getElementById("sb16-dma16-select");
+const sb16PortSelect = document.getElementById("sb16-port-select");
 
+// Brightness handler
 brightnessSlider.addEventListener("input", (event) => {
     const brightnessValue = event.target.value;
     const canvasElement = screenContainer.getElementsByTagName("canvas")[0];
@@ -386,49 +353,39 @@ async function initializeAndRunEmulator(config, statusMsg) {
     });
     emulator.add_listener("acpi-event", () => { });
     emulator.add_listener("acpi-debug", () => { });
-    setTimeout(resizeScreen, 250); // ensure resize after rendering
+    setTimeout(resizeScreen, 250);
 }
 function getBaseEmulatorConfig() {
-    const selectedRamSize = parseInt(ramSelect.value, 10);
-    const selectedCpuSpeed = parseInt(cpuSpeedSelect.value, 10);
-    const selectedVgaMemorySize = parseInt(vgaMemorySelect.value, 10);
-    const selectedNetAdapter = netAdapterSelect.value;
-    const selectedCpuJit = cpuJitSelect.value;
-    const acpiEnabled = acpiCheckbox.checked;
-
-    let biosSettings = customBiosBuffer ? { buffer: customBiosBuffer } : { url: "bios/seabios.bin" };
-    let biosTypeMsg = customBiosBuffer ? "custom BIOS" : "default BIOS";
-
-    let vgaBiosSettings = customVgaBiosBuffer ? { buffer: customVgaBiosBuffer } : { url: "bios/vgabios.bin" };
-    let vgaBiosTypeMsg = customVgaBiosBuffer ? "custom VGA BIOS" : "default VGA BIOS";
+    // Only working features included (SB16, sound, bios, drives)
+    // SB16 config object
+    const sb16Config = {
+        irq: Number(sb16IrqSelect.value),
+        dma8: Number(sb16Dma8Select.value),
+        dma16: Number(sb16Dma16Select.value),
+        port: Number(sb16PortSelect.value)
+    };
 
     let baseEmuConfig = {
         wasm_path: "v86.wasm",
-        memory_size: selectedRamSize,
-        cpu_mhz: selectedCpuSpeed,
-        vga_memory_size: selectedVgaMemorySize,
         screen_container: screenContainer,
-        bios: biosSettings,
-        vga_bios: vgaBiosSettings,
         autostart: true,
-        net_device: { type: selectedNetAdapter },
-        acpi: acpiEnabled,
+        sb16: sb16Config,
     };
-    if (selectedCpuJit !== "auto") {
-        baseEmuConfig.disable_jit = (selectedCpuJit === "off");
+    if (customBiosBuffer) {
+        baseEmuConfig.bios = { buffer: customBiosBuffer };
+    } else {
+        baseEmuConfig.bios = { url: "bios/seabios.bin" };
+    }
+    if (customVgaBiosBuffer) {
+        baseEmuConfig.vga_bios = { buffer: customVgaBiosBuffer };
+    } else {
+        baseEmuConfig.vga_bios = { url: "bios/vgabios.bin" };
     }
     if (!enableSoundCheckbox.checked) {
         baseEmuConfig.disable_audio = true;
     }
     return {
         config: baseEmuConfig,
-        ramMsg: `${selectedRamSize / (1024*1024)}MB RAM`,
-        cpuMsg: `${selectedCpuSpeed}MHz CPU`,
-        vgaMemMsg: `${selectedVgaMemorySize / (1024*1024)}MB VGA`,
-        netMsg: `Net: ${selectedNetAdapter}`,
-        acpiMsg: `ACPI: ${acpiEnabled ? "On" : "Off"}`,
-        jitMsg: `JIT: ${selectedCpuJit}`,
-        biosMsg: `(using ${biosTypeMsg}, ${vgaBiosTypeMsg})`
     };
 }
 startFdaButton.addEventListener("click", async () => { 
@@ -444,11 +401,9 @@ startFdaButton.addEventListener("click", async () => {
         statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
         const baseConfigInfo = getBaseEmulatorConfig();
         let emuConfig = { ...baseConfigInfo.config, fda: { buffer: fda_buffer }, boot_order: 0 };
-        let statusMessage = `Emulator booting from Floppy: ${file.name}, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg}, ${baseConfigInfo.biosMsg}`;
-        if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
-        if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
-        if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
-        await initializeAndRunEmulator(emuConfig, statusMessage);
+        if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; }
+        if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+        await initializeAndRunEmulator(emuConfig, "Emulator booting from Floppy: " + file.name);
     };
     reader.onerror = () => { alert("Error reading floppy file."); statusDiv.textContent = "Error reading floppy file."; };
     reader.readAsArrayBuffer(file);
@@ -461,11 +416,8 @@ startHdButton.addEventListener("click", async () => {
     statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
-    let statusMessage = `Emulator booting from Hard Drive, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg}, ${baseConfigInfo.biosMsg}`;
-    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
-    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
-    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
-    await initializeAndRunEmulator(emuConfig, statusMessage);
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator booting from Hard Drive");
 });
 startCdromButton.addEventListener("click", async () => { 
     if (!cdromIsoBuffer) {
@@ -475,20 +427,15 @@ startCdromButton.addEventListener("click", async () => {
     statusDiv.textContent = "Preparing emulator to boot from CD-ROM...";
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
-    let statusMessage = `Emulator booting from CD-ROM, ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg}, ${baseConfigInfo.biosMsg}`;
-    if (fdaFileInput.files.length > 0 && fdaFileInput.files[0]) { statusMessage += " (FDA also available)."; }
-    if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; statusMessage += " (HDA also available)."; }
-    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
-    await initializeAndRunEmulator(emuConfig, statusMessage);
+    if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator booting from CD-ROM");
 });
 startEmptyButton.addEventListener("click", async () => { 
     statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
     const baseConfigInfo = getBaseEmulatorConfig();
     let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
-    let statusMessage = `Emulator started (empty/BIOS setup). ${baseConfigInfo.ramMsg}, ${baseConfigInfo.cpuMsg}, ${baseConfigInfo.vgaMemMsg}, ${baseConfigInfo.netMsg}, ${baseConfigInfo.acpiMsg}, ${baseConfigInfo.jitMsg}, ${baseConfigInfo.biosMsg}`;
-    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; statusMessage += " (CD-ROM also available)."; }
-    if (!enableSoundCheckbox.checked) { statusMessage += " (Sound Disabled)";}
-    await initializeAndRunEmulator(emuConfig, statusMessage);
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator started (empty/BIOS setup)");
 });
 resetEmulatorButton.addEventListener("click", async function() { 
     if (emulator) {

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>v86 Emulator - Single Page UI</title>
+<style>
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: sans-serif;
+    background: #f4f4f4;
+}
+#main-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+}
+#emu-area {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+#display-block {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+#top-controls {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 18px 0 6px 0;
+}
+#screen_aspect_wrapper {
+    width: 80vw;
+    height: 48vw;
+    max-width: 100vw;
+    max-height: 70vh;
+    min-width: 320px;
+    min-height: 240px;
+    margin: 0 auto;
+    display: flex;
+    flex: 0 1 auto;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    resize: both;
+    border: 1.5px solid #ccc;
+    background: #000;
+    box-sizing: border-box;
+}
+#screen_container {
+    position: relative;
+    background: #000;
+    border: none;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+#screen_container > canvas,
+#screen_container > div {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    display: block;
+    object-fit: fill;
+}
+#fake-cursor {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    background: url('data:image/svg+xml;utf8,<svg width="18" height="18" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="7" fill="white" stroke="black" stroke-width="2"/></svg>') no-repeat center center;
+    z-index: 999;
+    display: none;
+}
+#mouse-button-panel {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    margin-top: 56px;
+}
+.mouse-btn {
+    padding: 12px 32px;
+    font-size: 1.1em;
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    margin: 0 8px;
+    background: #f7f7f7;
+    cursor: pointer;
+    box-shadow: 1px 1px 2px #ccc;
+    transition: background 0.13s;
+}
+.mouse-btn:active {
+    background: #eaeaea;
+}
+#controls-bottom-panel {
+    width: 100%;
+    background: #eaeaea;
+    padding: 14px 0 10px 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-end;
+    border-top: 1px solid #ccc;
+    min-height: 60px;
+    gap: 16px;
+    margin-top: 56px;
+}
+#controls-bottom-panel label {
+    margin-right: 6px;
+    font-size: 1em;
+}
+#controls-bottom-panel select, #controls-bottom-panel input[type="checkbox"], #controls-bottom-panel input[type="range"], #controls-bottom-panel button {
+    margin: 2px 0 2px 0;
+}
+#controls-bottom-panel button {
+    padding: 6px 12px;
+    font-size: 1em;
+    margin-right: 5px;
+    margin-bottom: 5px;
+}
+#controls-bottom-panel input[type="file"] {
+    font-size: 1em;
+}
+#status-container {
+    height: 32px;
+    line-height: 32px;
+    background: #e9e9e9;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 0.93em;
+    font-style: italic;
+    flex-shrink: 0;
+}
+@media (max-width: 1100px) {
+    #controls-bottom-panel { font-size: 0.96em; }
+    #top-controls { width: 100%; }
+    #screen_aspect_wrapper { width: 98vw; height: 60vw; }
+}
+</style>
+</head>
+<body>
+<div id="main-layout">
+    <div id="emu-area">
+        <div id="display-block">
+            <div id="top-controls">
+                <button id="toggle-fullscreen-button">Toggle Fullscreen</button>
+            </div>
+            <div id="screen_aspect_wrapper">
+                <div id="screen_container">
+                    <div id="fake-cursor"></div>
+                </div>
+            </div>
+            <div id="mouse-button-panel">
+                <button class="mouse-btn" id="left-mouse-btn">Left Mouse Button</button>
+                <button class="mouse-btn" id="right-mouse-btn">Right Mouse Button</button>
+            </div>
+            <div id="controls-bottom-panel">
+                <label for="enable-sound-checkbox">Enable Sound:</label>
+                <input type="checkbox" id="enable-sound-checkbox" checked>
+                <label for="brightness-slider">Brightness:</label>
+                <input type="range" id="brightness-slider" min="0.5" max="1.5" step="0.1" value="1">
+                <label for="mouse-speed-slider">Mouse Speed:</label>
+                <input type="range" id="mouse-speed-slider" min="0.1" max="2" step="0.05" value="1">
+                <span id="mouse-speed-value">1.00x</span>
+                <label for="sb16-irq-select">SB16 IRQ:</label>
+                <select id="sb16-irq-select">
+                    <option value="5" selected>5</option>
+                    <option value="7">7</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+                <label for="sb16-dma8-select">SB16 DMA 8-bit:</label>
+                <select id="sb16-dma8-select">
+                    <option value="0">0</option>
+                    <option value="1" selected>1</option>
+                    <option value="3">3</option>
+                </select>
+                <label for="sb16-dma16-select">SB16 DMA 16-bit:</label>
+                <select id="sb16-dma16-select">
+                    <option value="5" selected>5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
+                <label for="sb16-port-select">SB16 Port:</label>
+                <select id="sb16-port-select">
+                    <option value="0x220" selected>0x220</option>
+                    <option value="0x240">0x240</option>
+                    <option value="0x260">0x260</option>
+                </select>
+                <label for="custom-bios-file-input">Custom BIOS:</label>
+                <input type="file" id="custom-bios-file-input" accept=".bin" style="display: none;">
+                <button id="load-custom-bios-button">Load BIOS</button>
+                <label for="custom-vga-bios-file-input">Custom VGA BIOS:</label>
+                <input type="file" id="custom-vga-bios-file-input" accept=".bin" style="display: none;">
+                <button id="load-custom-vga-bios-button">Load VGA BIOS</button>
+                <label for="cdrom-file-input">CD-ROM ISO:</label>
+                <input type="file" id="cdrom-file-input" accept=".iso,.img" style="display: none;">
+                <button id="load-cdrom-button">Load CD ISO</button><span id="cdrom-file-name"></span>
+                <label for="fda-file-input">Floppy Image:</label>
+                <input type="file" id="fda-file-input" accept=".img,.IMG" />
+                <label for="hd-file-input" style="display:block; margin-top:5px;">Hard Drive Image:</label>
+                <input type="file" id="hd-file-input" accept=".img,.IMG" style="display: none;" />
+                <button id="load-hd-button">Load HD</button><span id="hd-file-name"></span>
+                <button id="start-fda-button">Boot Floppy</button>
+                <button id="start-hd-button">Boot HD</button>
+                <button id="start-cdrom-button">Boot CD</button>
+                <button id="start-empty-button">BIOS / Empty</button>
+                <button id="reset-emulator-button" style="background-color: #ffe0e0;">Reset Emulator</button>
+            </div>
+        </div>
+    </div>
+    <div id="status-container">
+        <div id="status">Please select an image file and click start.</div>
+    </div>
+</div>
+<script src="libv86.js"></script>
+<script>
+"use strict";
+// Mouse Speed/Fake Cursor Integration
+const mouseSpeedSlider = document.getElementById("mouse-speed-slider");
+const mouseSpeedValue = document.getElementById("mouse-speed-value");
+let mouseSpeed = parseFloat(mouseSpeedSlider.value);
+
+mouseSpeedSlider.addEventListener("input", () => {
+    mouseSpeed = parseFloat(mouseSpeedSlider.value);
+    mouseSpeedValue.textContent = mouseSpeed.toFixed(2) + "x";
+});
+mouseSpeedValue.textContent = mouseSpeed.toFixed(2) + "x";
+
+const screenContainer = document.getElementById("screen_container");
+const fakeCursor = document.getElementById("fake-cursor");
+let pointerLocked = false;
+let mouseX = 400, mouseY = 300;
+
+function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+}
+
+function updateFakeCursor() {
+    fakeCursor.style.left = `${mouseX - 9}px`;
+    fakeCursor.style.top = `${mouseY - 9}px`;
+}
+
+function showFakeCursor(show) {
+    fakeCursor.style.display = show ? "block" : "none";
+}
+
+screenContainer.style.cursor = "none";
+
+screenContainer.addEventListener("click", () => {
+    if (!pointerLocked) {
+        screenContainer.requestPointerLock();
+    }
+});
+
+document.addEventListener("pointerlockchange", () => {
+    pointerLocked = document.pointerLockElement === screenContainer;
+    showFakeCursor(pointerLocked);
+    if(pointerLocked){
+        // Center fake cursor on lock
+        const rect = screenContainer.getBoundingClientRect();
+        mouseX = rect.width / 2;
+        mouseY = rect.height / 2;
+        updateFakeCursor();
+    }
+});
+
+screenContainer.addEventListener("mousemove", (e) => {
+    if (!pointerLocked) return;
+    mouseX = clamp(mouseX + e.movementX * mouseSpeed, 0, screenContainer.offsetWidth);
+    mouseY = clamp(mouseY + e.movementY * mouseSpeed, 0, screenContainer.offsetHeight);
+    updateFakeCursor();
+    // Forward scaled deltas to emulator, if running
+    if (window.emulator && emulator.mouse_adapter && emulator.mouse_adapter.bus && typeof emulator.mouse_adapter.bus.send === "function") {
+        emulator.mouse_adapter.bus.send("mouse-delta", [
+            Math.round(e.movementX * mouseSpeed),
+            Math.round(e.movementY * mouseSpeed)
+        ]);
+    }
+});
+
+window.addEventListener("load", () => {
+    const rect = screenContainer.getBoundingClientRect();
+    mouseX = rect.width / 2;
+    mouseY = rect.height / 2;
+    updateFakeCursor();
+});
+
+// Mouse Buttons Emulation (for patched libv86.js)
+document.getElementById("left-mouse-btn").addEventListener("mousedown", function() {
+    if (window.emulator && emulator.mouse_adapter && emulator.mouse_adapter.bus && typeof emulator.mouse_adapter.bus.send === "function") {
+        emulator.mouse_adapter.bus.send("mouse-button", [0, true]);
+    }
+});
+document.getElementById("left-mouse-btn").addEventListener("mouseup", function() {
+    if (window.emulator && emulator.mouse_adapter && emulator.mouse_adapter.bus && typeof emulator.mouse_adapter.bus.send === "function") {
+        emulator.mouse_adapter.bus.send("mouse-button", [0, false]);
+    }
+});
+document.getElementById("right-mouse-btn").addEventListener("mousedown", function() {
+    if (window.emulator && emulator.mouse_adapter && emulator.mouse_adapter.bus && typeof emulator.mouse_adapter.bus.send === "function") {
+        emulator.mouse_adapter.bus.send("mouse-button", [2, true]);
+    }
+});
+document.getElementById("right-mouse-btn").addEventListener("mouseup", function() {
+    if (window.emulator && emulator.mouse_adapter && emulator.mouse_adapter.bus && typeof emulator.mouse_adapter.bus.send === "function") {
+        emulator.mouse_adapter.bus.send("mouse-button", [2, false]);
+    }
+});
+
+// ---------------------
+// v86 user interface logic
+// ---------------------
+function resizeScreen() {
+    const wrapper = document.getElementById('screen_aspect_wrapper');
+    const container = document.getElementById('screen_container');
+    if (!wrapper || !container) return;
+    container.style.width = "100%";
+    container.style.height = "100%";
+    let canvas = container.querySelector("canvas");
+    let textDiv = container.querySelector("div");
+    if (canvas) {
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        canvas.style.objectFit = "fill";
+    }
+    if (textDiv) {
+        textDiv.style.width = "100%";
+        textDiv.style.height = "100%";
+    }
+}
+window.addEventListener('resize', resizeScreen);
+window.addEventListener('DOMContentLoaded', resizeScreen);
+setTimeout(resizeScreen, 200);
+
+// (Rest of emulator logic from your template, unchanged)
+const startFdaButton = document.getElementById("start-fda-button");
+const fdaFileInput = document.getElementById("fda-file-input");
+const startHdButton = document.getElementById("start-hd-button");
+const hdFileInput = document.getElementById("hd-file-input");
+const loadHdButton = document.getElementById("load-hd-button");
+const startCdromButton = document.getElementById("start-cdrom-button"); 
+const cdromFileInput = document.getElementById("cdrom-file-input");
+const loadCdromButton = document.getElementById("load-cdrom-button");
+const startEmptyButton = document.getElementById("start-empty-button"); 
+const customBiosFileInput = document.getElementById("custom-bios-file-input");
+const loadCustomBiosButton = document.getElementById("load-custom-bios-button");
+const customVgaBiosFileInput = document.getElementById("custom-vga-bios-file-input"); 
+const loadCustomVgaBiosButton = document.getElementById("load-custom-vga-bios-button");
+const resetEmulatorButton = document.getElementById("reset-emulator-button"); 
+const toggleFullscreenButton = document.getElementById("toggle-fullscreen-button");
+const statusDiv = document.getElementById("status"); 
+const enableSoundCheckbox = document.getElementById("enable-sound-checkbox");
+const brightnessSlider = document.getElementById("brightness-slider");
+const sb16IrqSelect = document.getElementById("sb16-irq-select");
+const sb16Dma8Select = document.getElementById("sb16-dma8-select");
+const sb16Dma16Select = document.getElementById("sb16-dma16-select");
+const sb16PortSelect = document.getElementById("sb16-port-select");
+const screenWakeLockSentinel = null;
+const screenContainer2 = document.getElementById("screen_container");
+
+brightnessSlider.addEventListener("input", (event) => {
+    const brightnessValue = event.target.value;
+    const canvasElement = screenContainer2.getElementsByTagName("canvas")[0];
+    const textModeDiv = screenContainer2.getElementsByTagName("div")[0];
+    if (canvasElement) {
+        canvasElement.style.filter = `brightness(${brightnessValue})`;
+    }
+    if (textModeDiv) {
+        textModeDiv.style.filter = `brightness(${brightnessValue})`;
+    }
+});
+
+let emulator = null; 
+let hdaBuffer = null; 
+let customBiosBuffer = null; 
+let customVgaBiosBuffer = null; 
+let cdromIsoBuffer = null;
+
+async function initializeAndRunEmulator(config, statusMsg) { 
+    if (emulator) {
+        try { 
+            emulator.destroy(); 
+        } catch (err) { }
+        emulator = null;
+        screenContainer2.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
+    }
+    emulator = new V86(config);
+
+    emulator.add_listener("emulator-loaded", () => { statusDiv.textContent = "Emulator loaded. Booting..."; });
+    emulator.add_listener("emulator-started", async () => { 
+        statusDiv.textContent = statusMsg;
+    });
+    emulator.add_listener("emulator-stopped", async () => { 
+        statusDiv.textContent = "Emulator stopped. Select an image and click start to run again.";
+    });
+    emulator.add_listener("download-error", (err) => {
+        statusDiv.textContent = "Emulator download error: " + (err.request?.statusText || "File download failed");
+    });
+    const generalEmulatorErrorHandler = (event_name) => async (err) => { 
+        statusDiv.textContent = `Emulator error (${event_name}): ${err && err.message ? err.message : String(err)}`;
+    };
+    ["error", "nmi"].forEach(event_name => { 
+        emulator.add_listener(event_name, generalEmulatorErrorHandler(event_name));
+    });
+    setTimeout(resizeScreen, 250);
+}
+function getBaseEmulatorConfig() {
+    const sb16Config = {
+        irq: Number(sb16IrqSelect.value),
+        dma8: Number(sb16Dma8Select.value),
+        dma16: Number(sb16Dma16Select.value),
+        port: Number(sb16PortSelect.value)
+    };
+
+    let baseEmuConfig = {
+        wasm_path: "v86.wasm",
+        screen_container: screenContainer2,
+        autostart: true,
+        sb16: sb16Config,
+    };
+    if (customBiosBuffer) {
+        baseEmuConfig.bios = { buffer: customBiosBuffer };
+    } else {
+        baseEmuConfig.bios = { url: "bios/seabios.bin" };
+    }
+    if (customVgaBiosBuffer) {
+        baseEmuConfig.vga_bios = { buffer: customVgaBiosBuffer };
+    } else {
+        baseEmuConfig.vga_bios = { url: "bios/vgabios.bin" };
+    }
+    if (!enableSoundCheckbox.checked) {
+        baseEmuConfig.disable_audio = true;
+    }
+    return {
+        config: baseEmuConfig,
+    };
+}
+startFdaButton.addEventListener("click", async () => { 
+    if (fdaFileInput.files.length === 0) {
+        alert("Please select a floppy disk image to use the 'Boot Floppy' button.");
+        return;
+    }
+    const file = fdaFileInput.files[0];
+    statusDiv.textContent = "Reading floppy disk image: " + file.name;
+    const reader = new FileReader();
+    reader.onload = async (e) => { 
+        const fda_buffer = e.target.result;
+        statusDiv.textContent = "Floppy disk loaded. Preparing emulator...";
+        const baseConfigInfo = getBaseEmulatorConfig();
+        let emuConfig = { ...baseConfigInfo.config, fda: { buffer: fda_buffer }, boot_order: 0 };
+        if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; }
+        if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+        await initializeAndRunEmulator(emuConfig, "Emulator booting from Floppy: " + file.name);
+    };
+    reader.onerror = () => { alert("Error reading floppy file."); statusDiv.textContent = "Error reading floppy file."; };
+    reader.readAsArrayBuffer(file);
+});
+startHdButton.addEventListener("click", async () => { 
+    if (!hdaBuffer) {
+        alert("Please load a hard drive image first.");
+        return;
+    }
+    statusDiv.textContent = "Preparing emulator to boot from Hard Drive...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, hda: { buffer: hdaBuffer }, boot_order: 1 };
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator booting from Hard Drive");
+});
+startCdromButton.addEventListener("click", async () => { 
+    if (!cdromIsoBuffer) {
+        alert("Please load a CD-ROM ISO first.");
+        return;
+    }
+    statusDiv.textContent = "Preparing emulator to boot from CD-ROM...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, cdrom: { buffer: cdromIsoBuffer }, boot_order: 2 };
+    if (hdaBuffer) { emuConfig.hda = { buffer: hdaBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator booting from CD-ROM");
+});
+startEmptyButton.addEventListener("click", async () => { 
+    statusDiv.textContent = "Preparing to start empty / enter BIOS setup...";
+    const baseConfigInfo = getBaseEmulatorConfig();
+    let emuConfig = { ...baseConfigInfo.config, boot_order: 0 }; 
+    if (cdromIsoBuffer) { emuConfig.cdrom = { buffer: cdromIsoBuffer }; }
+    await initializeAndRunEmulator(emuConfig, "Emulator started (empty/BIOS setup)");
+});
+resetEmulatorButton.addEventListener("click", async function() { 
+    if (emulator) {
+        try {
+            emulator.restart();
+            statusDiv.textContent = "Emulator restarting...";
+        } catch (e) {
+            statusDiv.textContent = "Error restarting emulator. Please use a Boot/Start button.";
+        }
+    } else {
+        statusDiv.textContent = "Emulator is not running.";
+        alert("Emulator is not running. Nothing to reset.");
+    }
+});
+toggleFullscreenButton.addEventListener("click", function() {
+    if (!document.fullscreenElement) {
+        if (screenContainer2.requestFullscreen) {
+            screenContainer2.requestFullscreen();
+        } else if (screenContainer2.mozRequestFullScreen) {
+            screenContainer2.mozRequestFullScreen();
+        } else if (screenContainer2.webkitRequestFullscreen) {
+            screenContainer2.webkitRequestFullscreen();
+        } else if (screenContainer2.msRequestFullscreen) {
+            screenContainer2.msRequestFullscreen();
+        } else {
+            alert("Fullscreen API is not supported by this browser.");
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
+});
+loadCustomBiosButton.addEventListener("click", () => { customBiosFileInput.click(); });
+customBiosFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading custom BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom BIOS '${file.name}' loaded. Will be used on next start.`;
+        customBiosFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading custom BIOS: ${file.name}`); customBiosBuffer = null; statusDiv.textContent = "Error reading custom BIOS."; };
+    reader.readAsArrayBuffer(file);
+});
+loadCustomVgaBiosButton.addEventListener("click", () => { customVgaBiosFileInput.click(); }); 
+customVgaBiosFileInput.addEventListener('change', (event) => { 
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading custom VGA BIOS: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customVgaBiosBuffer = e.target.result;
+        statusDiv.textContent = `Custom VGA BIOS '${file.name}' loaded. Will be used on next start.`;
+        customVgaBiosFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading custom VGA BIOS: ${file.name}`); customVgaBiosBuffer = null; statusDiv.textContent = "Error reading custom VGA BIOS."; };
+    reader.readAsArrayBuffer(file);
+});
+loadCdromButton.addEventListener("click", () => { cdromFileInput.click(); });
+cdromFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading CD-ROM ISO: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        cdromIsoBuffer = e.target.result;
+        statusDiv.textContent = `CD-ROM ISO '${file.name}' loaded. Ready for CD-ROM boot.`;
+        document.getElementById('cdrom-file-name').textContent = ' (' + file.name + ')';
+        cdromFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading CD-ROM ISO: ${file.name}`); cdromIsoBuffer = null; statusDiv.textContent = "Error reading CD-ROM ISO."; document.getElementById('cdrom-file-name').textContent = '';};
+    reader.readAsArrayBuffer(file);
+});
+loadHdButton.addEventListener("click", () => { hdFileInput.click(); });
+hdFileInput.addEventListener('change', (event) => {
+    if (!event.target.files.length) return;
+    const file = event.target.files[0];
+    statusDiv.textContent = `Reading hard drive image: ${file.name}...`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        hdaBuffer = e.target.result;
+        statusDiv.textContent = `Hard drive image '${file.name}' loaded.`;
+        document.getElementById('hd-file-name').textContent = ' (' + file.name + ')';
+        hdFileInput.value = "";
+    };
+    reader.onerror = () => { alert(`Error reading HDA: ${file.name}`); hdaBuffer = null; statusDiv.textContent = "Error reading HDA."; document.getElementById('hd-file-name').textContent = '';};
+    reader.readAsArrayBuffer(file);
+});
+</script>
+</body>
+</html>
